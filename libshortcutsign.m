@@ -28,15 +28,19 @@
  * If not verified, this function returns a negative error code.
 */
 int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *authData, const char *unsignedShortcutPath, const char *destPath) {
+ int succeed = -1;
  AEAContext context = AEAContextCreateWithProfile(0);
  if (context) {
   if (AEAContextSetFieldUInt(context, AEA_CONTEXT_FIELD_COMPRESSION_ALGORITHM, COMPRESSION_LZFSE) == 0) {
    CFErrorRef cferr = 0;
    NSData *key = (__bridge NSData *)SecKeyCopyExternalRepresentation(privKey, &cferr);
+   if (cferr) {
+    NSLog(@"cferr: %@",(__bridge NSError *)cferr);
+   }
    if (key) {
     if (AEAContextSetFieldBlob(context, AEA_CONTEXT_FIELD_SIGNING_PRIVATE_KEY, AEA_CONTEXT_FIELD_REPRESENTATION_X963, [key bytes], [key length]) == 0) {
      AEAContextSetFieldBlob(context, AEA_CONTEXT_FIELD_AUTH_DATA, AEA_CONTEXT_FIELD_REPRESENTATION_RAW, [authData bytes], [authData length]);
-     AAByteStream byteStream = AAFileStreamOpenWithPath(destPath,O_CREAT | O_RDWR, 0420);
+     AAByteStream byteStream = AAFileStreamOpenWithPath(destPath,O_CREAT | O_RDWR, 420);
      AAByteStream encryptedStream = AEAEncryptionOutputStreamOpen(byteStream, context, 0, 0);
      AAFieldKeySet fields = AAFieldKeySetCreateWithString("TYP,PAT,LNK,DEV,DAT,MOD,FLG,MTM,BTM,CTM,HLC,CLC");
      if (fields) {
@@ -46,7 +50,7 @@ int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *auth
        if (archiveStream) {
         if (AAArchiveStreamWritePathList(archiveStream, pathList, fields, unsignedShortcutPath, 0, 0, 0, 0) == 0) {
          /* successfully contact signed shortcut */
-         return 0;
+         succeed = 0;
         }
         AAArchiveStreamClose(archiveStream);
        }
@@ -61,7 +65,7 @@ int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *auth
   }
   AEAContextDestroy(context);
  }
- return -1;
+ return succeed;
 }
 
 /* 
@@ -79,7 +83,7 @@ int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *auth
  *
  * If it fails to get auth data, it will return 0/nil.
 */
-NSData *auth_data_from_shortcut(const char *restrict filepath) {
+NSData *auth_data_from_shortcut(const char *filepath) {
  /* load shortcut into memory */
  FILE *fp = fopen(filepath, "r");
  if (!fp) {
@@ -254,20 +258,19 @@ NSData *auth_data_for_account(OpaqueSecCertificateRef cert, OpaqueSecCertificate
  * If the function fails, it returns 0/nil.
 */
 NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain) {
- int i = [appleIDCertDataChain count];
- if (i < 1) {
+ int count = [appleIDCertDataChain count];
+ if (count < 1) {
   fprintf(stderr,"libshortcutsign: no items in passed in cert data chain\n");
   return 0;
  }
- NSMutableArray *returnArray = [[NSMutableArray alloc]initWithCapacity:i];
+ NSMutableArray *returnArray = [[NSMutableArray alloc]initWithCapacity:count];
  NSData *certData;
  SecCertificateRef cert;
- generate_appleIDCertChain_with_data:
- i--;
- certData = appleIDCertDataChain[i];
- cert = SecCertificateCreateWithData(0, (__bridge CFDataRef)certData);
- returnArray[i] = cert;
- if (i != 0) { goto generate_appleIDCertChain_with_data;};
+ for (int i = 0; i < count; i++) {
+  certData = appleIDCertDataChain[i];
+  cert = SecCertificateCreateWithData(0, (__bridge CFDataRef)certData);
+  returnArray[i] = cert;
+ }
  return [[NSArray alloc]initWithArray:returnArray];
 }
 
@@ -308,7 +311,7 @@ int verify_dict_auth_data(NSDictionary *dict) {
   if (![signingPublicKeySignature isKindOfClass:[NSData class]]) {
    signingPublicKeySignature = nil;
   }
-  SecKeyRef publicKey = [[appleIDCertChain firstObject]copyPublicKey];
+  SecKeyRef publicKey = SecCertificateCopyKey([appleIDCertChain firstObject]);
   SecKeyCreateWithData((__bridge CFDataRef)signingPublicKey, (__bridge CFDictionaryRef)@{
    (__bridge NSString *)kSecAttrKeyType : (__bridge NSString *)kSecAttrKeyTypeECSECPrimeRandom,
    (__bridge NSString *)kSecAttrKeyClass : (__bridge NSString *)kSecAttrKeyClassPublic,
