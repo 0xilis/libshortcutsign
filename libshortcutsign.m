@@ -45,10 +45,8 @@ int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *auth
       if (pathList) {
        AAArchiveStream archiveStream = AAEncodeArchiveOutputStreamOpen(encryptedStream, 0, 0, 0, 0);
        if (archiveStream) {
-        if (AAArchiveStreamWritePathList(archiveStream, pathList, fields, unsignedShortcutPath, 0, 0, 0, 0) == 0) {
-         /* successfully contact signed shortcut */
-         succeed = 0;
-        }
+        /* If it was successful it will return 0 */
+        succeed = AAArchiveStreamWritePathList(archiveStream, pathList, fields, unsignedShortcutPath, 0, 0, 0, 0);
         AAArchiveStreamClose(archiveStream);
        }
        AAPathListDestroy(pathList);
@@ -106,9 +104,13 @@ NSData *auth_data_from_shortcut(const char *filepath) {
  buf_size += *(sptr - 1) << 16;
  buf_size += *(sptr - 2) << 8;
  buf_size += *(sptr - 3);
- if (buf_size > archive_size-0xB) {
-  /* buf_size is bigger than our file, abort */
-  fprintf(stderr,"libshortcutsign: context_buf_size bigger than archive_size.\n");
+ if (buf_size > archive_size-0x293c) {
+  /* 
+   * The encrypted data for for signed shortcuts, both contact signed
+   * and icloud signed, should be at buf_size+0x293c. If our buf_size
+   * reaches to or past the encrypted data, then it's too big.
+  */
+  fprintf(stderr,"libshortcutsign: buf_size reaches past data start\n");
   return 0;
  }
  /* we got buf_size, now fill buffer */
@@ -149,6 +151,16 @@ int decrypt_archive(AAByteStream byteStream, AEAContext context, const char *sig
  }
  AAByteStream decryptionInputStream = AEADecryptionInputStreamOpen(byteStream, context, 0, 0);
  if (!decryptionInputStream) {
+  /*
+   * Special Note: WorkflowKit doesn't check if we were actually successful
+   * at opening the decryption input stream, at least as of iOS 16.
+   * This will cause WorkflowKit to not show an error, but full on crash at
+   * the AAArchiveStreamProcess. This is as it will try to jump to a function
+   * pointer, and since the decryption input stream failed, it will be NULL.
+   * Not sure if this is a WorkflowKit bug and it should be checking for nil
+   * or if it's a libAppleArchive bug and it should check if the function pointers
+   * actually exist on the struct before attempting to jump to it.
+  */
   fprintf(stderr,"libshortcutsign: AEADecryptionInputStreamOpen returned nil\n");
   return -5;
  }
