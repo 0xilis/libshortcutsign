@@ -21,3 +21,16 @@ Be aware you'll need to construct the auth data yourself; you can try extracting
 
 Another helpful resource you may also want to look at the decompilation for WorkflowKit shortcut signing, especially `WFShortcutPackageFile` and `WFShortcutSigningContext` in it; WorkflowKit uses `contextWithAppleIDAccount:signingKey:` to generate the auth data which you can find in the decomp. Of course, directly copy and pasting the decomplication shouldn't be done, at least for public projects as it would not only make your app against guidelines but also likely infringe copyright, but it is great to use as a reference for how you could build your own method to do this.
 
+# Compiling
+
+Let's imagine you are using libshortcutsign in a main.m file which doesn't require any other libraries. You can compile it like this:
+
+`clang -framework Foundation main.m -lAppleArchive -framework Security libshortcutsign/libshortcutsign.m -o main`
+
+# Contributing
+
+Contributions are welcome! Not just to the code, but also better documentation would also be appreciated; shortcuts signing is highly undocumented and TBH I'm not sure how to say exactly some of the things I know about it...
+
+Minor contributions will also be appriecated.
+
+The only request is to not depend on PrivateFrameworks. If your contribution absolutely needs to have it, then *perhaps* I'll make a seperate branch for those who are comfortable using them, but the main branch will never have them as I feel like it would drive away people who need to use libshortcutsign in public app store apps...
