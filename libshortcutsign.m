@@ -34,9 +34,6 @@ int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *auth
   if (AEAContextSetFieldUInt(context, AEA_CONTEXT_FIELD_COMPRESSION_ALGORITHM, COMPRESSION_LZFSE) == 0) {
    CFErrorRef cferr = 0;
    NSData *key = (__bridge NSData *)SecKeyCopyExternalRepresentation(privKey, &cferr);
-   if (cferr) {
-    NSLog(@"cferr: %@",(__bridge NSError *)cferr);
-   }
    if (key) {
     if (AEAContextSetFieldBlob(context, AEA_CONTEXT_FIELD_SIGNING_PRIVATE_KEY, AEA_CONTEXT_FIELD_REPRESENTATION_X963, [key bytes], [key length]) == 0) {
      AEAContextSetFieldBlob(context, AEA_CONTEXT_FIELD_AUTH_DATA, AEA_CONTEXT_FIELD_REPRESENTATION_RAW, [authData bytes], [authData length]);
@@ -393,6 +390,45 @@ int verify_dict_auth_data_cert_trust(NSDictionary *dict) {
 }
 
 /*
+ * verify_contact_signed_auth_data
+ *
+ * Replicates WorkflowKit's signature check process
+ * The first sort of signature checking is not actually from
+ * validation methods at all, but rather inside of the method
+ * to get the signing context from auth data.
+ *
+ * Then, next, it uses validateAppleIDCertificatesWithError to check the trust.
+ * It should be noted that WorkflowKit actually checks if SecTrustEvaluateWithError
+ * returns errSecCertificateExpired, and if it does, it renders it as valid anyway.
+ *
+ * Finally, it uses validateAppleIDValidationRecordWithCompletion to check
+ * if you shared the shortcut via the AltDSID in the validation record, or
+ * if it's from someone in your contacts via the SHA256 phone/email hashes.
+ * libshortcutsign doesn't replicate this final part, as it's easy to check
+ * yourself if you have that info. Everything else is implemented by libshortcutsign.
+ *
+ * Currently (as the name implies) this only checks contact signed shortcuts, though
+ * in the future a function for checking iCloud signed shortcuts may be implemented.
+ * 
+ * If you just want to do the first step, call verify_dict_auth_data.
+ * If you just want to do the second step, call verify_dict_auth_data_cert_trust.
+ * If you want to use the path of the shortcut, call verify_contact_signed_shortcut.
+ *
+ * If verified, this function returns 0.
+ * If not verified, this function returns a negative error code.
+*/
+int verify_contact_signed_auth_data(NSData *authData) {
+ NSDictionary *dict = [NSPropertyListSerialization propertyListWithData:authData options:0 format:0 error:nil];
+ if (dict && [dict isKindOfClass:[NSDictionary class]]) {
+  if (verify_dict_auth_data(dict) == 0) {
+   return verify_dict_auth_data_cert_trust(dict);
+  }
+ }
+ /* validation failed :( */
+ return -1;
+}
+
+/*
  * verify_contact_signed_shortcut
  *
  * Replicates WorkflowKit's signature check process
@@ -425,12 +461,5 @@ int verify_contact_signed_shortcut(const char *signedShortcutPath) {
   fprintf(stderr,"libshortcutsign: verification failed to extract authData\n");
   return -1;
  }
- NSDictionary *dict = [NSPropertyListSerialization propertyListWithData:authData options:0 format:0 error:nil];
- if (dict && [dict isKindOfClass:[NSDictionary class]]) {
-  if (verify_dict_auth_data(dict) == 0) {
-   return verify_dict_auth_data_cert_trust(dict);
-  }
- }
- /* validation failed :( */
- return -1;
+ return verify_contact_signed_auth_data(authData);
 }

@@ -20,6 +20,7 @@ int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *
 NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain);
 int verify_dict_auth_data(NSDictionary *dict);
 int verify_dict_auth_data_cert_trust(NSDictionary *dict);
+int verify_contact_signed_auth_data(NSData *authData);
 int verify_contact_signed_shortcut(const char *signedShortcutPath);
 
 #endif /* libshortcutsign_h */
