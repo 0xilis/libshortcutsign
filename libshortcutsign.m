@@ -275,6 +275,8 @@ NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain) {
 SecPolicyRef SecPolicyCreateAppleIDAuthorityPolicy(void);
 extern const CFStringRef kSecPolicyCheckTemporalValidity;
 void SecPolicySetOptionsValue(SecPolicyRef policy, CFStringRef key, CFTypeRef value);
+SecPolicyRef SecPolicyCreateAppleIDValidationRecordSigningPolicy(void);
+OSStatus SecCMSVerifyCopyDataAndAttributes(CFDataRef message, CFDataRef detached_contents, CFTypeRef policy, SecTrustRef *trustref, CFDataRef *attached_contents, CFDictionaryRef *signed_attributes);
 
 /*
  * verify_dict_auth_data
@@ -288,35 +290,57 @@ void SecPolicySetOptionsValue(SecPolicyRef policy, CFStringRef key, CFTypeRef va
  * from the certificate chain, and this step will not do any checking
  * and instead just return YES.
  *
- * For both steps of contact signed validation, call verify_contact_signed_shortcut
+ * For both steps of contact signed validation, call verify_contact_signed_shortcut.
  *
  * If verified, this function returns 0.
  * If not verified, this function returns a negative error code.
 */
 int verify_dict_auth_data(NSDictionary *dict) {
-  /* TODO: Finish this function. */
-  NSArray *appleIDDataCertChain = dict[@"AppleIDCertificateChain"];
-  if (appleIDDataCertChain && [appleIDDataCertChain isKindOfClass:[NSArray class]]) {
-   NSArray *appleIDCertChain = generate_appleid_certs_with_data(appleIDDataCertChain);
-   NSData *signingPublicKey = dict[@"SigningPublicKey"];
-   if (![signingPublicKey isKindOfClass:[NSData class]]) {
-    signingPublicKey = nil;
-   }
-   NSData *signingPublicKeySignature = dict[@"SigningPublicKeySignature"];
-   if (![signingPublicKeySignature isKindOfClass:[NSData class]]) {
-    signingPublicKeySignature = nil;
-   }
-   SecKeyRef publicKey = [[appleIDCertChain firstObject]copyPublicKey];
-   SecKeyCreateWithData((__bridge CFDataRef)signingPublicKey, (__bridge CFDictionaryRef)@{
-    (__bridge NSString *)kSecAttrKeyType : (__bridge NSString *)kSecAttrKeyTypeECSECPrimeRandom,
-    (__bridge NSString *)kSecAttrKeyClass : (__bridge NSString *)kSecAttrKeyClassPublic,
-   }, nil);
-   unsigned char isVerified = SecKeyVerifySignature(publicKey, kSecKeyAlgorithmRSASignatureMessagePSSSHA256, (__bridge CFDataRef)signingPublicKey, (__bridge CFDataRef)signingPublicKeySignature, nil);
-   if (isVerified) {
-    /* there is more checking here, but for now it isn't implemented. */
-    return 0;
+ /* TODO: Finish this function. */
+ NSArray *appleIDDataCertChain = dict[@"AppleIDCertificateChain"];
+ if (appleIDDataCertChain && [appleIDDataCertChain isKindOfClass:[NSArray class]]) {
+  NSArray *appleIDCertChain = generate_appleid_certs_with_data(appleIDDataCertChain);
+  NSData *signingPublicKey = dict[@"SigningPublicKey"];
+  if (![signingPublicKey isKindOfClass:[NSData class]]) {
+   signingPublicKey = nil;
+  }
+  NSData *signingPublicKeySignature = dict[@"SigningPublicKeySignature"];
+  if (![signingPublicKeySignature isKindOfClass:[NSData class]]) {
+   signingPublicKeySignature = nil;
+  }
+  SecKeyRef publicKey = [[appleIDCertChain firstObject]copyPublicKey];
+  SecKeyCreateWithData((__bridge CFDataRef)signingPublicKey, (__bridge CFDictionaryRef)@{
+   (__bridge NSString *)kSecAttrKeyType : (__bridge NSString *)kSecAttrKeyTypeECSECPrimeRandom,
+   (__bridge NSString *)kSecAttrKeyClass : (__bridge NSString *)kSecAttrKeyClassPublic,
+  }, nil);
+  unsigned char isVerified = SecKeyVerifySignature(publicKey, kSecKeyAlgorithmRSASignatureMessagePSSSHA256, (__bridge CFDataRef)signingPublicKey, (__bridge CFDataRef)signingPublicKeySignature, nil);
+  if (isVerified) {
+   NSData *appleIDValidationRecord = dict[@"AppleIDValidationRecord"];
+   if (appleIDValidationRecord) {
+    dispatch_queue_attr_t attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0);
+    dispatch_queue_t queue = dispatch_queue_create("SFAppleIDQueue",attr);
+    (void)dispatch_semaphore_create(0);
+    if (!queue) {
+     queue = dispatch_get_global_queue(0, 0);
+    }
+    SecPolicyRef policy = SecPolicyCreateAppleIDValidationRecordSigningPolicy();
+    if (policy) {
+     SecPolicySetOptionsValue(policy, kSecPolicyCheckTemporalValidity, kCFBooleanFalse);
+     SecTrustRef trust = 0;
+     CFDataRef attachedRecordContents = 0;
+     if (SecCMSVerifyCopyDataAndAttributes((__bridge CFDataRef)appleIDValidationRecord, 0, policy, &trust, &attachedRecordContents, 0) == 0) {
+      if (trust && attachedRecordContents) {
+       NSDictionary *authDict = [NSPropertyListSerialization propertyListWithData:(__bridge NSData *)attachedRecordContents options:0 format:0 error:0];
+       if (authDict) {
+        /* there is more checking here, but for now it isn't implemented. */
+        return 0;
+       }
+      }
+     }
+    }
    }
   }
+ }
  return -1;
 }
 
