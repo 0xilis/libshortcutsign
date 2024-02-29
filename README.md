@@ -1,6 +1,6 @@
 # libshortcutsign
 
-Library by Snoolie K / 0xilis for contact signed shortcuts.
+Library by 0xilis for contact signed shortcuts.
 
 # Compatibility
 
