@@ -15,6 +15,8 @@ Be aware though that unfortunately it is still restricted to iOS 15.0+ / macOS 1
 While Security.framework is open source and (if I remember correctly?) some GNUstep folks may have gotten some functionality on other platforms ex linux, libAppleArchive is fully closed source sadly, and I doubt anyone would go through the pain of reversing it... (it is certianly above my skill level).
 
 # Signing
+libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file. **Notice for usage: the passed in unsignedShortcutPath must point to a directory that contains the unsigned shortcut file, not to the directory itself. The directory must only contain the unsigned shortcut as "Shortcut.wflow" and nothing else. If you name it something different, shortcuts fails to decrypt it.**
+
 libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/seemoo-lab/airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) ) contact sign a shortcut.
 
 Be aware you'll need to construct the auth data yourself; you can try extracting the auth data from another contact signed shortcut (ex using libshortcutsign's own `auth_data_from_shortcut`) to get a better understanding.
