@@ -245,6 +245,148 @@ int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *
  return -9;
 }
 
+/*
+ * extract_aa_from_aea
+ *
+ * Extracts the AA Archive from a signed shortcut AEA.
+ * Only meant for internal use. Don't call this yourself!
+ */
+uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize, unsigned long offset) {
+    uint8_t *aaLZFSEPtr = encodedAppleArchive + offset;
+    size_t decode_size = 0x100000; /* Assume AA Archive is 1MB or less */
+    uint8_t *buffer = malloc(decode_size);
+    compression_decode_buffer(buffer, decode_size, aaLZFSEPtr, encodedAEASize, nil, COMPRESSION_LZFSE);
+    if (!buffer) {
+        fprintf(stderr,"libshortcutsign: failed to decompress LZFSE\n");
+        return 0;
+    }
+    return buffer;
+}
+
+/*
+ * extract_wflow_from_aa
+ *
+ * Extracts the wflow file from an AA.
+ * Only meant for internal use. Don't call this yourself!
+ */
+uint8_t *extract_wflow_from_aa(uint8_t *appleArchive, size_t *plistSize) {
+    if (memcmp(appleArchive, "AA01", 4)) {
+        fprintf(stderr,"libshortcutsign: extract_wflow_from_aa has non-AA file passed in\n");
+        return 0;
+    }
+    /*
+     * ***THIS IS BAD!!!!***
+     * I have *NO* idea how to get the size of the decompressed data.
+     * So instead, I just hope the file name in archive is within 0x100 bytes.
+     * In the future if you know how to figure out out, fix this...
+     */
+    void *nameBegin = memmem(appleArchive, 0x100, "Shortcut.wflow", 14);
+    if (!nameBegin) {
+        fprintf(stderr,"libshortcutsign: Shortcut.wflow not found in archive passed into extract_wflow_from_aa\n");
+        return 0;
+    }
+    /* Search 0x100 bytes after nameBegin */
+    uint8_t *plistBegin = memmem(nameBegin, 0x100, "bplist", 6);
+    uint8_t *plistEnd;
+    if (!plistBegin) {
+        /* Maybe we have a raw xml plist - much more fun! */
+        plistBegin = memmem(nameBegin, 0x100, "<?xml", 5);
+        if (!plistBegin) {
+            fprintf(stderr,"libshortcutsign: plist not found in extract_wflow_from_aa\n");
+            return 0;
+        }
+        /* We have a raw XML plist! Just search for </plist> and viola! */
+        plistEnd = memmem(plistBegin, 0x100000, "</plist>", 8);
+        if (!plistEnd) {
+            /* Miracle how we got here without crashing due to accessing restricted memory */
+            fprintf(stderr,"libshortcutsign: failed to find end of xml plist\n");
+            return 0;
+        }
+        plistEnd += 8;
+    } else {
+        /* Binary Plist */
+        size_t plistSize = (*(plistBegin - 1)) << 24;
+        plistSize += (*(plistBegin - 2)) << 16;
+        plistSize += (*(plistBegin - 3)) << 8;
+        plistSize += (*(plistBegin - 4));
+        plistEnd = plistSize + plistBegin;
+    }
+    /* Copy plist data to buffer */
+    size_t wflowSize = plistEnd - plistBegin;
+    if (plistSize) {
+        *plistSize = wflowSize;
+    }
+    uint8_t *wflow = malloc(wflowSize);
+    memcpy(wflow, plistBegin, wflowSize);
+    return wflow;
+}
+
+/*
+ * extract_signed_shortcut
+ *
+ * Extracts the unsigned shortcut from the signed shortcut.
+ * AEA-less! Use on non-Apple platforms :).
+ */
+int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath) {
+    /* load AEA archive into memory */
+    FILE *fp = fopen(signedShortcutPath,"r");
+    if (!fp) {
+        fprintf(stderr,"libshortcutsign: extract_signed_shortcut failed to find path\n");
+        return -1;
+    }
+    fseek(fp, 0, SEEK_END);
+    size_t binary_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    char *aeaShortcutArchive = malloc(binary_size * sizeof(char));
+    /* copy bytes to binary, byte by byte... */
+    int c;
+    size_t n = 0;
+    while ((c = fgetc(fp)) != EOF) {
+        aeaShortcutArchive[n++] = (char) c;
+    }
+    fclose(fp);
+    /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
+    /* We assume it's located at 0x8-0xB */
+    register const char *sptr = aeaShortcutArchive + 0xB;
+    size_t buf_size = *sptr << 24;
+    buf_size += *(sptr - 1) << 16;
+    buf_size += *(sptr - 2) << 8;
+    buf_size += *(sptr - 3);
+    if (buf_size > binary_size-0x495c) {
+        /*
+         * The encrypted data for for signed shortcuts, both contact signed
+         * and icloud signed, should be at buf_size+0x495c. If our buf_size
+         * reaches to or past the encrypted data, then it's too big.
+         */
+        fprintf(stderr,"libshortcutsign: buf_size reaches past data start\n");
+        return -1;
+    }
+    /* Decompress the LZFSE-compressed data */
+    uint8_t *aaRawArchive = extract_aa_from_aea((uint8_t *)aeaShortcutArchive, binary_size, buf_size + 0x495c);
+    free(aeaShortcutArchive);
+    if (!aaRawArchive) {
+        return -1;
+    }
+    
+    /* Extract Shortcut.wflow from AA */
+    size_t plistSize = 0;
+    uint8_t *shortcutWflowPlist = extract_wflow_from_aa(aaRawArchive, &plistSize);
+    free(aaRawArchive);
+    if (!shortcutWflowPlist) {
+        return -1;
+    }
+    /* Write shortcutWflowPlist to file */
+    fp = fopen(destPath, "w");
+    if (!fp) {
+        fprintf(stderr,"libshortcutsign: extract_signed_shortcut failed to open destPath\n");
+        return -1;
+    }
+    fwrite(shortcutWflowPlist, plistSize, 1, fp);
+    fclose(fp);
+    free(shortcutWflowPlist);
+    return 0;
+}
+
 /* WIP function, ignore */
 #if 0
 NSData *auth_data_for_account(OpaqueSecCertificateRef cert, OpaqueSecCertificateRef intermediateCert, OpaqueSecKeyRef privateKey, SecKeyRef signingKey) {
