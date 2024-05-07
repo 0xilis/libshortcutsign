@@ -93,6 +93,22 @@ NSData *auth_data_from_shortcut(const char *filepath) {
  int c;
  size_t n = 0;
  while ((c = fgetc(fp)) != EOF) {
+  if (n > size) {
+   /*
+    * If, at any point, a file is modified during / before copy,
+    * ex it has a really small size, but another process
+    * quickly modifies it after binary_size is saved but
+    * before / during the bytes are copied to the buffer,
+    * then it would go past the buffer, resulting
+    * in a heap overflow from our race. Fixing this
+    * problem by checking if n ever reaches past
+    * the initial binary_size...
+    */
+   free(archive);
+   fclose(fp);
+   fprintf(stderr,"libshortcutsign: reached past binarySize\n");
+   return 0;
+  }
   archive[n++] = (char) c;
  }
  size_t archive_size = n;
@@ -342,6 +358,22 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     int c;
     size_t n = 0;
     while ((c = fgetc(fp)) != EOF) {
+        if (n > binary_size) {
+            /*
+             * If, at any point, a file is modified during / before copy,
+             * ex it has a really small size, but another process
+             * quickly modifies it after binary_size is saved but
+             * before / during the bytes are copied to the buffer,
+             * then it would go past the buffer, resulting
+             * in a heap overflow from our race. Fixing this
+             * problem by checking if n ever reaches past
+             * the initial binary_size...
+             */
+            free(aeaShortcutArchive);
+            fclose(fp);
+            fprintf(stderr,"libshortcutsign: extract_signed_shortcut reached past binarySize\n");
+            return -1;
+        }
         aeaShortcutArchive[n++] = (char) c;
     }
     fclose(fp);
