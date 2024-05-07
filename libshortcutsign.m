@@ -89,6 +89,20 @@ NSData *auth_data_from_shortcut(const char *filepath) {
  size_t size = ftell(fp);
  fseek(fp, 0, SEEK_SET);
  char *archive = malloc(size * sizeof(char));
+ /*
+  * Explained better in comment below, but
+  * a process may write to a file while
+  * this is going on so size would be
+  * bigger than the bytes we copy,
+  * making it hit EOF before size
+  * is hit. This means that potentially
+  * other memory from the process may
+  * be kept here. To prevent this,
+  * we 0 out our buffer to make sure
+  * it doesn't contain any leftover memory
+  * left.
+  */
+ memset(archive, 0, size * sizeof(char));
  /* copy bytes to binary */
  int c;
  size_t n = 0;
@@ -131,6 +145,7 @@ NSData *auth_data_from_shortcut(const char *filepath) {
  }
  /* we got buf_size, now fill buffer */
  uint8_t *buffer = (uint8_t *)malloc(buf_size);
+ memset(buffer, 0, buf_size);
  /*
   * the reason why we are doing a reverse
   * iteration is because doing it this way
@@ -354,6 +369,20 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     size_t binary_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
     char *aeaShortcutArchive = malloc(binary_size * sizeof(char));
+    /*
+     * Explained better in comment below, but
+     * a process may write to a file while
+     * this is going on so binary_size would be
+     * bigger than the bytes we copy,
+     * making it hit EOF before binary_size
+     * is hit. This means that potentially
+     * other memory from the process may
+     * be kept here. To prevent this,
+     * we 0 out our buffer to make sure
+     * it doesn't contain any leftover memory
+     * left.
+     */
+    memset(aeaShortcutArchive, 0, binary_size * sizeof(char));
     /* copy bytes to binary, byte by byte... */
     int c;
     size_t n = 0;
