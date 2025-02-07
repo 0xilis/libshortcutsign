@@ -278,7 +278,9 @@ int verify_contact_signed_auth_data(NSData *authData) {
  * If not verified, this function returns a negative error code.
 */
 int verify_contact_signed_shortcut(const char *signedShortcutPath) {
- NSData *authData = auth_data_from_shortcut(signedShortcutPath);
+ size_t authDataBufferSize;
+ uint8_t *authDataBuffer = auth_data_from_shortcut(signedShortcutPath, &authDataBufferSize);
+ NSData *authData = [NSData dataWithBytesNoCopy:authDataBuffer length:authDataBufferSize];
  if (!authData) {
   fprintf(stderr,"libshortcutsign: verification failed to extract authData\n");
   return -1;
