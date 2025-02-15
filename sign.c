@@ -4,21 +4,35 @@
 #include <openssl/pem.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
-#include <openssl/hmac.h>
+#include <openssl/ossl_typ.h>
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);  /* HMAC output size for SHA256 is 32 bytes. */
-    unsigned int len = SHA256_DIGEST_LENGTH;
+    size_t len = SHA256_DIGEST_LENGTH;
 
-    /* Perform HMAC using SHA256 */
-    HMAC_CTX *context = HMAC_CTX_new();
-    HMAC_Init_ex(context, hkdf_key, 32, EVP_sha256(), NULL);
-    HMAC_Update(context, (unsigned char*)data2, data2Len);
-    HMAC_Update(context, (unsigned char*)data1, data1Len);
-    HMAC_Update(context, (unsigned char*)&data2Len, sizeof(data2Len));
-    HMAC_Final(context, hmac, &len);
+    /* Fetch the HMAC algorithm */
+    EVP_MAC *hmac_type = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    if (!hmac_type) {
+        fprintf(stderr, "Failed to fetch HMAC\n");
+        return NULL;
+    }
 
-    HMAC_CTX_free(context);
+    /* Create a MAC context with the HMAC algorithm */
+    EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(hmac_type);
+    if (!ctx) {
+        fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
+        EVP_MAC_free(hmac_type);
+        return NULL;
+    }
+
+    /* Initialize the MAC context with the key */
+    EVP_MAC_init(ctx, hkdf_key, 32, NULL);
+    EVP_MAC_update(ctx, data2, data2Len);
+    EVP_MAC_update(ctx, data1, data1Len);
+    EVP_MAC_final(ctx, hmac, &len, SHA256_DIGEST_LENGTH);
+
+    EVP_MAC_CTX_free(ctx);
+    EVP_MAC_free(hmac_type);
 
     return hmac;
 }
@@ -26,27 +40,49 @@ void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, siz
 void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key, size_t key_len, size_t output_len) {
     unsigned char *output = malloc(output_len);
     unsigned char prk[SHA256_DIGEST_LENGTH];
-    unsigned int len = SHA256_DIGEST_LENGTH;
+    size_t len = SHA256_DIGEST_LENGTH;
+
+    /* Fetch the HMAC algorithm */
+    EVP_MAC *hmac_type = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    if (!hmac_type) {
+        fprintf(stderr, "Failed to fetch HMAC\n");
+        return NULL;
+    }
+
+    /* Create a MAC context with the HMAC algorithm */
+    EVP_MAC_CTX *context = EVP_MAC_CTX_new(hmac_type);  // Pass the HMAC object
+    if (!context) {
+        fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
+        EVP_MAC_free(hmac_type);
+        return NULL;
+    }
 
     /* Extract phase: HMAC(salt, key) */
-    HMAC_CTX *context = HMAC_CTX_new();
-    HMAC_Init_ex(context, salt, salt_len, EVP_sha256(), NULL);
-    HMAC_Update(context, (unsigned char*)key, key_len);
-    HMAC_Final(context, prk, &len);
-    HMAC_CTX_free(context);
+    EVP_MAC_init(context, salt, salt_len, NULL);  // Initialize with salt
+    EVP_MAC_update(context, key, key_len);  // Update with key
+    EVP_MAC_final(context, prk, &len, SHA256_DIGEST_LENGTH);  // Finalize to get the PRK
+
+    EVP_MAC_CTX_free(context);  // Free context
+    EVP_MAC_free(hmac_type);  // Free the algorithm
 
     /* Expand phase: HMAC(prk, info, 0x01, 0x02, ...) to get multiple keys */
     unsigned char counter = 1;
     size_t pos = 0;
     while (pos < output_len) {
-        HMAC_CTX *expand_context = HMAC_CTX_new();
-        HMAC_Init_ex(expand_context, prk, SHA256_DIGEST_LENGTH, EVP_sha256(), NULL);
-        HMAC_Update(expand_context, &counter, 1);
-        HMAC_Update(expand_context, (unsigned char*)&pos, sizeof(pos));
-        HMAC_Final(expand_context, output + pos, &len);
-        HMAC_CTX_free(expand_context);
-        pos += len;
-        counter++;
+        EVP_MAC_CTX *expand_context = EVP_MAC_CTX_new(hmac_type);  // Create context for expansion phase
+        if (!expand_context) {
+            fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
+            return NULL;
+        }
+
+        EVP_MAC_init(expand_context, prk, SHA256_DIGEST_LENGTH, NULL);  // Initialize with PRK
+        EVP_MAC_update(expand_context, &counter, 1);  // Update with counter
+        EVP_MAC_update(expand_context, (unsigned char*)&pos, sizeof(pos));  // Update with position
+        EVP_MAC_final(expand_context, output + pos, &len, SHA256_DIGEST_LENGTH);  // Finalize expanded data
+
+        EVP_MAC_CTX_free(expand_context);  // Free context
+        pos += len;  // Update position
+        counter++;  // Increment counter
     }
 
     return output;
@@ -62,10 +98,11 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey) {
 
     /* Perform SHA-256 on the modified archive */
     unsigned char sha256_hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256_ctx;
-    SHA256_Init(&sha256_ctx);
-    SHA256_Update(&sha256_ctx, aeaShortcutArchive, auth_data_size + 0x13c);
-    SHA256_Final(sha256_hash, &sha256_ctx);
+    EVP_MD_CTX *sha256_ctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(sha256_ctx, EVP_sha256(), NULL);
+    EVP_DigestUpdate(sha256_ctx, aeaShortcutArchive, auth_data_size + 0x13c);
+    EVP_DigestFinal_ex(sha256_ctx, sha256_hash, NULL);
+    EVP_MD_CTX_free(sha256_ctx);
 
     /* Save the hash to a file (resigned_hash.bin) */
     FILE *hash_file = fopen("resigned_hash.bin", "wb");

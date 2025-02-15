@@ -1,5 +1,5 @@
 mkdir build
-cd build
-clang -c -framework Foundation -lAppleArchive -framework Security ../xplat.c ../libshortcutsign.m 
+cd build 
+clang -c ../xplat.c ../sign.c ../libshortcutsign.m 
 cd ..
-ar rcs ./build/libshortcutsign.a ./build/libshortcutsign.o ./build/xplat.o
+ar rcs ./build/libshortcutsign.a ./build/libshortcutsign.o ./build/xplat.o ./build/sign.o 

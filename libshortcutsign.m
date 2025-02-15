@@ -88,7 +88,7 @@ NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain) {
  for (int i = 0; i < count; i++) {
   certData = appleIDCertDataChain[i];
   cert = SecCertificateCreateWithData(0, (__bridge CFDataRef)certData);
-  returnArray[i] = cert;
+  returnArray[i] = (id)cert;
  }
  return [[NSArray alloc]initWithArray:returnArray];
 }
@@ -130,7 +130,8 @@ int verify_dict_auth_data(NSDictionary *dict) {
   if (![signingPublicKeySignature isKindOfClass:[NSData class]]) {
    signingPublicKeySignature = nil;
   }
-  SecKeyRef publicKey = SecCertificateCopyKey(appleIDCertChain[0]);
+  SecCertificateRef rootCert = (SecCertificateRef)(appleIDCertChain[0]);
+  SecKeyRef publicKey = SecCertificateCopyKey(rootCert);
   SecKeyCreateWithData((__bridge CFDataRef)signingPublicKey, (__bridge CFDictionaryRef)@{
    (__bridge NSString *)kSecAttrKeyType : (__bridge NSString *)kSecAttrKeyTypeECSECPrimeRandom,
    (__bridge NSString *)kSecAttrKeyClass : (__bridge NSString *)kSecAttrKeyClassPublic,
