@@ -126,6 +126,11 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey, size_t
     EVP_SignFinal(md_ctx, signature, &sig_len, private_key);
     EVP_MD_CTX_free(md_ctx);
 
+    if (sig_len > 128) {
+        fprintf(stderr, "sig_len is over 128 bytes, cannot be held in aea\n");
+        return;
+    }
+
     /* Overwrite the signature field in the buffer with the new signature */
     memcpy(aeaShortcutArchive + auth_data_size + 0xc, signature, sig_len);
 
