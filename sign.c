@@ -5,6 +5,9 @@
 #include <openssl/sha.h>
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
+#include <openssl/hmac.h>
+#include <openssl/err.h>
+#include <compression.h> /* TODO: ADD LZFSE SUBMODULE */
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);  /* HMAC output size for SHA256 is 32 bytes. */
@@ -137,4 +140,102 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey, size_t
     /* Clean up */
     free(signature);
     EVP_PKEY_free(private_key);
+}
+
+
+
+
+
+void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, const char *outputPath, void *privateKey) {
+    /* TODO: This code is really hard to understand */
+    size_t archivedDirSize = aeaShortcutArchiveSize;
+    size_t compressed_size = archivedDirSize * 2;
+    uint8_t *buffer = malloc(compressed_size);
+    compressed_size = compression_encode_buffer(buffer, compressed_size, archivedDir, archivedDirSize, NULL, COMPRESSION_LZFSE);
+    free(archivedDir);
+    if (!buffer) {
+        fprintf(stderr,"libshortcutsign: failed to compress LZFSE\n");
+        exit(1);
+    }
+
+    /* Extract auth_data_size from aeaShortcutArchive */
+    register const char *sptr = aeaShortcutArchive + 0xB;
+    size_t auth_data_size = *sptr << 24;
+    auth_data_size += *(sptr - 1) << 16;
+    auth_data_size += *(sptr - 2) << 8;
+    auth_data_size += *(sptr - 3);
+
+    /* Fix auth_data_size + offsets */
+    memcpy(aeaShortcutArchive + auth_data_size + 0xec, &archivedDirSize, 4);
+    memcpy(aeaShortcutArchive + auth_data_size + 0x13c, &archivedDirSize, 4);
+
+    /* Set compressed LZFSE data */
+    aeaShortcutArchive = realloc(aeaShortcutArchive, auth_data_size + 0x495c + compressed_size);
+    memcpy(aeaShortcutArchive + auth_data_size + 0x495c, buffer, compressed_size);
+    free(buffer);
+
+    /* Prepare HKDF context */
+    const uint8_t *salt = (uint8_t *)(aeaShortcutArchive + auth_data_size + 0xac);
+    uint8_t context[0x4c] = {0};
+    memcpy(context, "AEA_AMK", 7);
+    memcpy(context + 11, privateKey, 0x41); /* Copy public part of private key */
+
+    /* Derive key using OpenSSL HKDF */
+    uint8_t *derivedKey = malloc(0x100);
+    uint8_t *hkdf_output = hkdf_extract_and_expand(salt, 32, context, sizeof(context), 32);
+    if (hkdf_output) {
+        memcpy(derivedKey, hkdf_output, 32);
+        free(hkdf_output);
+    } else {
+        fprintf(stderr, "HKDF derivation failed\n");
+        exit(1);
+    }
+
+    /* Derive more keys using HKDF (AEA_CK, AEA_SK, etc.) */
+    void *aea_ck_ctx = malloc(10);
+    memcpy(aea_ck_ctx, "AEA_CK", 6);
+    memset(aea_ck_ctx + 6, 0, 4);
+    uint8_t *aea_ck = hkdf_extract_and_expand(derivedKey, 32, aea_ck_ctx, 10, 32);
+    void *aea_sk_ctx = malloc(10);
+    memcpy(aea_sk_ctx, "AEA_SK", 6);
+    memset(aea_sk_ctx + 6, 0, 4);
+    uint8_t *aea_sk = hkdf_extract_and_expand(aea_ck, 32, aea_sk_ctx, 10, 32);
+    free(aea_ck_ctx);
+    free(aea_sk_ctx);
+
+    /* HMAC derivation for AEA_CK, AEA_SK, etc. */
+    uint8_t *hmac = hmac_derive(aea_sk, aeaShortcutArchive + auth_data_size + 0x495c, compressed_size, 0, 0);
+
+    /* Replace old hmac in binary data */
+    memcpy(aeaShortcutArchive + auth_data_size + 0x295c, hmac, 0x2000);
+    free(hmac);
+    free(aea_sk);
+
+    /* Re-hmac for AEA_CHEK */
+    uint8_t *aea_chek = hkdf_extract_and_expand(aea_ck, 32, "AEA_CHEK", 8, 32);
+    hmac = hmac_derive(aea_chek, aeaShortcutArchive + auth_data_size + 0x13c, 0x2800, aeaShortcutArchive + auth_data_size + 0x293c, 0x2020);
+    memcpy(aeaShortcutArchive + auth_data_size + 0x11c, hmac, 32);
+    free(hmac);
+
+    /* Re-hmac for AEA_RHEK */
+    uint8_t *aea_rhek = hkdf_extract_and_expand(derivedKey, 32, "AEA_RHEK", 8, 32);
+    uint8_t *chekPlusAuthData = malloc(auth_data_size + 32);
+    memcpy(chekPlusAuthData, aeaShortcutArchive + auth_data_size + 0x11c, 32);
+    memcpy(chekPlusAuthData + 32, aeaShortcutArchive + 0xc, auth_data_size);
+    hmac = hmac_derive(aea_rhek, aeaShortcutArchive + auth_data_size + 0xec, 0x30, chekPlusAuthData, 0x59f);
+    memcpy(aeaShortcutArchive + auth_data_size + 0xcc, hmac, 32);
+    free(chekPlusAuthData);
+    free(hmac);
+    free(aea_rhek);
+
+    /* Write the final resigned archive to output file */
+    FILE *fp = fopen(outputPath, "w");
+    if (!fp) {
+        free(aeaShortcutArchive);
+        fprintf(stderr,"libshortcutsign: failed to open destPath\n");
+        exit(1);
+    }
+    fwrite(aeaShortcutArchive, auth_data_size + 0x495c + compressed_size, 1, fp);
+    fclose(fp);
+    free(aeaShortcutArchive);
 }
