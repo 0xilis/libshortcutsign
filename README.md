@@ -32,9 +32,10 @@ While Security.framework is open source and (if I remember correctly?) some GNUs
 |--------------|:---------:|-----------:|
 | sign_shortcut_with_private_key_and_auth_data | NO | libAppleArchive & Security.framework needed |
 | auth_data_from_shortcut | YES | No issues! |
-| extract_signed_shortcut | YES | Uses libcompression but just replace it with https://github.com/lzfse/lzfse |
+| extract_signed_shortcut | YES | No issues! |
 | verify_contact_signed_auth_data | YES w/GNUstep | Security.framework use |
 | verify_contact_signed_shortcut | YES w/GNUstep | Security.framework use |
+| resign_shortcut_with_new_aa | YES | Not yet stable |
 
 # Signing
 libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file. **Notice for usage: the passed in unsignedShortcutPath must point to a directory that contains the unsigned shortcut file, not to the directory itself. The directory must only contain the unsigned shortcut as "Shortcut.wflow" and nothing else. If you name it something different, shortcuts fails to decrypt it.**
@@ -45,12 +46,10 @@ Be aware you'll need to construct the auth data yourself; you can try extracting
 
 # Compiling
 
-Let's imagine you are using libshortcutsign in a main.m file which doesn't require any other libraries. You can compile it like this:
-
-`clang -framework Foundation main.m -lAppleArchive -framework Security libshortcutsign/libshortcutsign.m -o main`
+libshortcutsign provides a Makefile for easily building it as a static library. Just run `make` and it will build to `build/usr/lib/libshortcutsign.a`.
 
 # Contributing
 
-Contributions are welcome! Not just to the code, but also better documentation would also be appreciated; shortcuts signing is highly undocumented and TBH I'm not sure how to say exactly some of the things I know about it...
+Contributions are welcome! Not just to the code, but also better documentation would also be appreciated; shortcuts signing is highly undocumented and to be honest I'm not sure how to say exactly some of the things I know about it...
 
 Minor contributions will also be appriecated.
