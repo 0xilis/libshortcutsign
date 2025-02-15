@@ -50,7 +50,7 @@ void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key
     }
 
     /* Create a MAC context with the HMAC algorithm */
-    EVP_MAC_CTX *context = EVP_MAC_CTX_new(hmac_type);  // Pass the HMAC object
+    EVP_MAC_CTX *context = EVP_MAC_CTX_new(hmac_type);
     if (!context) {
         fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
         EVP_MAC_free(hmac_type);
@@ -58,42 +58,42 @@ void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key
     }
 
     /* Extract phase: HMAC(salt, key) */
-    EVP_MAC_init(context, salt, salt_len, NULL);  // Initialize with salt
-    EVP_MAC_update(context, key, key_len);  // Update with key
-    EVP_MAC_final(context, prk, &len, SHA256_DIGEST_LENGTH);  // Finalize to get the PRK
+    EVP_MAC_init(context, salt, salt_len, NULL);
+    EVP_MAC_update(context, key, key_len);
+    EVP_MAC_final(context, prk, &len, SHA256_DIGEST_LENGTH);
 
-    EVP_MAC_CTX_free(context);  // Free context
-    EVP_MAC_free(hmac_type);  // Free the algorithm
+    EVP_MAC_CTX_free(context);
+    EVP_MAC_free(hmac_type);
 
     /* Expand phase: HMAC(prk, info, 0x01, 0x02, ...) to get multiple keys */
     unsigned char counter = 1;
     size_t pos = 0;
     while (pos < output_len) {
-        EVP_MAC_CTX *expand_context = EVP_MAC_CTX_new(hmac_type);  // Create context for expansion phase
+        EVP_MAC_CTX *expand_context = EVP_MAC_CTX_new(hmac_type);
         if (!expand_context) {
             fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
             return NULL;
         }
 
-        EVP_MAC_init(expand_context, prk, SHA256_DIGEST_LENGTH, NULL);  // Initialize with PRK
-        EVP_MAC_update(expand_context, &counter, 1);  // Update with counter
-        EVP_MAC_update(expand_context, (unsigned char*)&pos, sizeof(pos));  // Update with position
-        EVP_MAC_final(expand_context, output + pos, &len, SHA256_DIGEST_LENGTH);  // Finalize expanded data
+        EVP_MAC_init(expand_context, prk, SHA256_DIGEST_LENGTH, NULL);
+        EVP_MAC_update(expand_context, &counter, 1);
+        EVP_MAC_update(expand_context, (unsigned char*)&pos, sizeof(pos));
+        EVP_MAC_final(expand_context, output + pos, &len, SHA256_DIGEST_LENGTH);
 
-        EVP_MAC_CTX_free(expand_context);  // Free context
-        pos += len;  // Update position
-        counter++;  // Increment counter
+        EVP_MAC_CTX_free(expand_context);
+        pos += len;
+        counter++;
     }
 
     return output;
 }
 
-void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey) {
+void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
     /* Update signature field and delete certain portions of the archive */
     size_t auth_data_size = * (unsigned char *)(aeaShortcutArchive + 0xB); 
-    memset(aeaShortcutArchive + auth_data_size + 0xc, 0, 256);  /* Zero out the signature */
+    memset(aeaShortcutArchive + auth_data_size + 0xc, 0, 128);  /* Zero out the signature */
 
-    // Remove all bytes from auth_data_size + 0x13c onwards
+    /* Remove all bytes from auth_data_size + 0x13c onwards */
     memset(aeaShortcutArchive + auth_data_size + 0x13c, 0, 1024);
 
     /* Perform SHA-256 on the modified archive */
@@ -104,16 +104,19 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey) {
     EVP_DigestFinal_ex(sha256_ctx, sha256_hash, NULL);
     EVP_MD_CTX_free(sha256_ctx);
 
-    /* Save the hash to a file (resigned_hash.bin) */
-    FILE *hash_file = fopen("resigned_hash.bin", "wb");
-    fwrite(sha256_hash, sizeof(sha256_hash), 1, hash_file);
-    fclose(hash_file);
+    /* Convert the raw private key to an EVP_PKEY */
+    const unsigned char *priv_key_ptr = (unsigned char *)privateKey;
+    EVP_PKEY *private_key = NULL;
+    EC_KEY *ec_key = d2i_ECPrivateKey(NULL, &priv_key_ptr, privateKeyLen);
+    if (!ec_key) {
+        fprintf(stderr, "Failed to load EC private key from buffer\n");
+        return;
+    }
+
+    private_key = EVP_PKEY_new();
+    EVP_PKEY_assign_EC_KEY(private_key, ec_key);  /* Assign the EC key to the EVP_PKEY structure */
 
     /* Sign the hash with the private key using OpenSSL */
-    FILE *private_key_file = fopen("ShortcutsSigningPrivateKey.pem", "r");
-    EVP_PKEY *private_key = PEM_read_PrivateKey(private_key_file, NULL, NULL, NULL);
-    fclose(private_key_file);
-
     EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
     EVP_SignInit(md_ctx, EVP_sha256());
     EVP_SignUpdate(md_ctx, sha256_hash, SHA256_DIGEST_LENGTH);
@@ -123,10 +126,8 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey) {
     EVP_SignFinal(md_ctx, signature, &sig_len, private_key);
     EVP_MD_CTX_free(md_ctx);
 
-    /* Write the signature to a file (resigned_sig.bin) */
-    FILE *sig_file = fopen("resigned_sig.bin", "wb");
-    fwrite(signature, sig_len, 1, sig_file);
-    fclose(sig_file);
+    /* Overwrite the signature field in the buffer with the new signature */
+    memcpy(aeaShortcutArchive + auth_data_size + 0xc, signature, sig_len);
 
     /* Clean up */
     free(signature);
