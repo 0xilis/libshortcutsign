@@ -6,13 +6,13 @@ Library by 0xilis for contact signed shortcuts.
 
 libshortcutsign requires these dependencies:
 
-- libplist
+- libplist (soon)
 - OpenSSL
 
 Statically provided as submodules:
 
 - libNeoAppleArchive
-- liblzfse (soon)
+- liblzfse
 
 # Compatibility
 
