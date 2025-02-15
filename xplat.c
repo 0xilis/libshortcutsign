@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
+#include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
 
 #include "build/lzfse/include/lzfse.h"
 
