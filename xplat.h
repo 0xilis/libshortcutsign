@@ -6,7 +6,7 @@
 #ifndef libshortcutsign_xplat_h
 #define libshortcutsign_xplat_h
 
-NSData *auth_data_from_shortcut(const char *filepath);
+uint8_t *auth_data_from_shortcut(const char *filepath, size_t *bufferSize);
 int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath);
 int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath);
 

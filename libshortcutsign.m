@@ -130,7 +130,7 @@ int verify_dict_auth_data(NSDictionary *dict) {
   if (![signingPublicKeySignature isKindOfClass:[NSData class]]) {
    signingPublicKeySignature = nil;
   }
-  SecKeyRef publicKey = SecCertificateCopyKey([appleIDCertChain firstObject]);
+  SecKeyRef publicKey = SecCertificateCopyKey(appleIDCertChain[0]);
   SecKeyCreateWithData((__bridge CFDataRef)signingPublicKey, (__bridge CFDictionaryRef)@{
    (__bridge NSString *)kSecAttrKeyType : (__bridge NSString *)kSecAttrKeyTypeECSECPrimeRandom,
    (__bridge NSString *)kSecAttrKeyClass : (__bridge NSString *)kSecAttrKeyClassPublic,
