@@ -4,12 +4,7 @@
 
 #include "libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
 
-/* compression.h is not xplat but just replace with liblzfse, too lazy to make a Makefile for liblzfse submodule rn */
-#include <compression.h>
-
-#ifndef COMPRESSION_LZFSE
-#define COMPRESSION_LZFSE 0x801
-#endif
+#include "build/lzfse/include/lzfse.h"
 
 /* 
  * auth_data_from_shortcut
@@ -164,7 +159,7 @@ uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize
     uint8_t *aaLZFSEPtr = encodedAppleArchive + offset;
     size_t decode_size = 0x100000; /* Assume AA Archive is 1MB or less */
     uint8_t *buffer = malloc(decode_size);
-    *aaSize = compression_decode_buffer(buffer, decode_size, aaLZFSEPtr, encodedAEASize, 0, COMPRESSION_LZFSE);
+    *aaSize = lzfse_decode_buffer(buffer, decode_size, aaLZFSEPtr, encodedAEASize, 0);
     if (!buffer) {
         fprintf(stderr,"libshortcutsign: failed to decompress LZFSE\n");
         return 0;

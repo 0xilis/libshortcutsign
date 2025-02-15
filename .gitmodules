@@ -1,3 +1,6 @@
 [submodule "libNeoAppleArchive"]
 	path = libNeoAppleArchive
 	url = https://github.com/0xilis/libNeoAppleArchive.git
+[submodule "libs/lzfse"]
+	path = libs/lzfse
+	url = https://github.com/lzfse/lzfse.git

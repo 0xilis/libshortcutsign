@@ -7,7 +7,7 @@
 #include <openssl/ossl_typ.h>
 #include <openssl/hmac.h>
 #include <openssl/err.h>
-#include <compression.h> /* TODO: ADD LZFSE SUBMODULE */
+#include "build/lzfse/include/lzfse.h"
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);  /* HMAC output size for SHA256 is 32 bytes. */
@@ -151,7 +151,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     size_t archivedDirSize = aeaShortcutArchiveSize;
     size_t compressed_size = archivedDirSize * 2;
     uint8_t *buffer = malloc(compressed_size);
-    compressed_size = compression_encode_buffer(buffer, compressed_size, archivedDir, archivedDirSize, NULL, COMPRESSION_LZFSE);
+    compressed_size = lzfse_encode_buffer(buffer, compressed_size, archivedDir, archivedDirSize, NULL);
     free(archivedDir);
     if (!buffer) {
         fprintf(stderr,"libshortcutsign: failed to compress LZFSE\n");
