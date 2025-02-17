@@ -14,7 +14,9 @@ output: $(buildDir)
 	@ # Build libshortcutsign.a
 	@echo "building libshortcutsign..."
 	@cd build
-	@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os
+	@ifeq ($(shell uname), Darwin)
+		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os
+	@endif
 	@$(CC) -c xplat.c -o build/obj/xplat.o -Os
 	@$(CC) -c sign.c -o build/obj/sign.o -Os
 	@cd ..
