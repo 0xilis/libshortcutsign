@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
 
