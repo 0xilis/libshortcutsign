@@ -7,6 +7,8 @@ LZFSE_DIR = libs/lzfse
 BUILD_DIR = ../../build/lzfse
 OBJ_DIR = build/obj
 
+OS := $(shell uname)
+
 output: $(buildDir)
 	@ # Build liblzfse submodule
 	@echo "building liblzfse..."
@@ -14,9 +16,12 @@ output: $(buildDir)
 	@ # Build libshortcutsign.a
 	@echo "building libshortcutsign..."
 	@cd build
-	@ifeq ($(shell uname), Darwin)
-		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os
-	@endif
+
+	
+	@if [ OS = "Darwin" ]; then\
+		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os;\
+	fi
+
 	@$(CC) -c xplat.c -o build/obj/xplat.o -Os
 	@$(CC) -c sign.c -o build/obj/sign.o -Os
 	@cd ..

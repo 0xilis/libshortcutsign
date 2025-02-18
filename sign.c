@@ -7,6 +7,7 @@
 #include <openssl/ossl_typ.h>
 #include <openssl/hmac.h>
 #include <openssl/err.h>
+#include <openssl/ec.h>
 #include "build/lzfse/include/lzfse.h"
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
