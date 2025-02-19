@@ -18,33 +18,6 @@
  * THEIR REPLACEMENTS. VERY UNSTABLE, DO NOT USE!!!!
 */
 
-void log_hex(const char *label, const uint8_t *data, size_t len) {
-    printf("%s: ", label);
-    for (size_t i = 0; i < len; i++) {
-        printf("%02x", data[i]);
-    }
-    printf("\n");
-}
-
-void log_rsa_key(RSA *rsa) {
-    if (!rsa) {
-        fprintf(stderr, "RSA key is NULL\n");
-        return;
-    }
-
-    const BIGNUM *n, *e;
-    RSA_get0_key(rsa, &n, &e, NULL);
-
-    printf("RSA Public Key:\n");
-    printf("Modulus (n): ");
-    BN_print_fp(stdout, n);
-    printf("\n");
-
-    printf("Exponent (e): ");
-    BN_print_fp(stdout, e);
-    printf("\n");
-}
-
 /* Function to load a certificate chain from an array of certificate data */
 STACK_OF(X509) *load_certificate_chain(uint8_t **cert_data_array, size_t cert_count, size_t *certSizesList) {
     STACK_OF(X509) *chain = sk_X509_new_null();
@@ -146,47 +119,10 @@ int verify_certificate_chain(STACK_OF(X509) *chain) {
     return ret; /* returns 1 if valid, 0 if invalid */
 }
 
-/* Function to log the details of a certificate chain */
-void log_certificate_chain(STACK_OF(X509) *chain) {
-    if (!chain) {
-        fprintf(stderr, "Certificate chain is NULL\n");
-        return;
-    }
-
-    for (int i = 0; i < sk_X509_num(chain); i++) {
-        X509 *cert = sk_X509_value(chain, i);
-        if (!cert) {
-            fprintf(stderr, "Certificate %d is NULL\n", i);
-            continue;
-        }
-
-        printf("Certificate %d:\n", i);
-
-        /* Log subject */
-        X509_NAME *subject = X509_get_subject_name(cert);
-        if (subject) {
-            printf("Subject: ");
-            X509_NAME_print_ex_fp(stdout, subject, 0, XN_FLAG_ONELINE);
-            printf("\n");
-        }
-
-        /* Log issuer */
-        X509_NAME *issuer = X509_get_issuer_name(cert);
-        if (issuer) {
-            printf("Issuer: ");
-            X509_NAME_print_ex_fp(stdout, issuer, 0, XN_FLAG_ONELINE);
-            printf("\n");
-        }
-
-        printf("\n");
-    }
-}
-
 int verify_rsa_signature_evp(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, RSA *public_key) {
     /* Log the signed data and its hash for debugging */
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(signed_data, signed_data_len, hash);
-    log_hex("Signed data hash", hash, SHA256_DIGEST_LENGTH);
 
     EVP_PKEY *pkey = EVP_PKEY_new();
     EVP_PKEY_assign_RSA(pkey, public_key);
@@ -226,51 +162,9 @@ int verify_rsa_signature_evp(const uint8_t *signed_data, size_t signed_data_len,
     return ret; /* returns 1 if valid, 0 if invalid, or -1 on error */
 }
 
-/* Function to extract EC_KEY from a certificate (the public key) */
-EC_KEY *get_public_key_from_cert(const uint8_t *cert_data, size_t cert_size) {
-    const unsigned char *p = cert_data;
-
-    /* Check the size of the cert data (logging for debugging) */
-    printf("Certificate data size: %zu\n", cert_size);
-
-    X509 *cert = d2i_X509(NULL, &p, cert_size);
-    if (!cert) {
-        /* If it fails, print an error message */
-        fprintf(stderr, "Error parsing certificate in DER format\n");
-
-        /* Attempt to parse the cert as PEM format (Base64 encoded) */
-        BIO *bio = BIO_new_mem_buf(cert_data, cert_size);
-        if (!bio) {
-            fprintf(stderr, "Error creating BIO for certificate\n");
-            return NULL;
-        }
-
-        cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-        BIO_free(bio);
-
-        if (!cert) {
-            fprintf(stderr, "Error parsing certificate in PEM format\n");
-            return NULL;
-        }
-    }
-
-    EC_KEY *ec_key = X509_get_pubkey(cert);
-    if (!ec_key) {
-        fprintf(stderr, "Error extracting EC public key from certificate\n");
-        X509_free(cert);
-        return NULL;
-    }
-
-    X509_free(cert);
-    return ec_key;
-}
-
 /* Function to extract RSA from a certificate (the public key) */
 RSA *get_public_key_from_cert_rsa(const uint8_t *cert_data, size_t cert_size) {
     const unsigned char *p = cert_data;
-
-    /* Check the size of the cert data (logging for debugging) */
-    printf("Certificate data size: %zu\n", cert_size);
 
     X509 *cert = d2i_X509(NULL, &p, cert_size);
     if (!cert) {
@@ -314,8 +208,6 @@ RSA *get_public_key_from_cert_rsa(const uint8_t *cert_data, size_t cert_size) {
         return NULL;
     }
 
-    log_rsa_key(rsa_key);
-
     return rsa_key;
 }
 
@@ -358,7 +250,6 @@ int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t *
         uint32_t cert_size;
         plist_get_data_val(cert_item, &cert_data, &cert_size);
 
-printf("cert_size: %d\n",cert_size);
         (*cert_data_array)[i] = malloc(cert_size);
         (*certSizesList)[i] = cert_size;
         memcpy((*cert_data_array)[i], cert_data, cert_size);
@@ -369,7 +260,7 @@ printf("cert_size: %d\n",cert_size);
 }
 
 /* Function to verify the authenticity of the dictionary (equivalent to verify_dict_auth_data) */
-int verify_dict_auth_data_UNSTABLE(uint8_t *authData, size_t authDataSize) {
+int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     uint8_t **cert_data_array;
     size_t cert_count;
     size_t *certSizesList;
@@ -385,9 +276,6 @@ int verify_dict_auth_data_UNSTABLE(uint8_t *authData, size_t authDataSize) {
         fprintf(stderr, "Error loading certificate chain\n");
         return -1;
     }
-
-    /* Log the certificate chain for debugging */
-    log_certificate_chain(chain);
 
     /* Verify the certificate chain */
     if (verify_certificate_chain(chain) != 1) {
@@ -457,4 +345,37 @@ int verify_dict_auth_data_UNSTABLE(uint8_t *authData, size_t authDataSize) {
     plist_free(plist);
 
     return 0; /* If everything is verified successfully */
+}
+
+
+/*
+ * verify_contact_signed_auth_data
+ *
+ * Replicates WorkflowKit's signature check process
+ * Currently only supports contact signed & no CMS (yet)
+ *
+ * If verified, this function returns 0.
+ * If not verified, this function returns a negative error code.
+*/
+int verify_contact_signed_auth_data(uint8_t *authData, size_t authDataSize) {
+    return verify_dict_auth_data(authData, authDataSize);
+}
+
+/*
+ * verify_contact_signed_shortcut
+ *
+ * Replicates WorkflowKit's signature check process
+ * Currently only supports contact signed & no CMS (yet)
+ *
+ * If verified, this function returns 0.
+ * If not verified, this function returns a negative error code.
+*/
+int verify_contact_signed_shortcut(const char *signedShortcutPath) {
+    size_t authDataSize;
+    uint8_t *authData = auth_data_from_shortcut(signedShortcutPath, &authDataSize);
+    if (!authData) {
+        fprintf(stderr,"libshortcutsign: verification failed to extract authData\n");
+        return -1;
+    }
+    return verify_contact_signed_auth_data(authData, authDataSize);
 }

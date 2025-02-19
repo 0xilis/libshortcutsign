@@ -15,12 +15,8 @@
 #import <Security/Security.h>
 
 #include "extract.h"
+#include "verify.h"
 
 int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *authData, const char *unsignedShortcutPath, const char *destPath);
-NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain);
-int verify_dict_auth_data(NSDictionary *dict);
-int verify_dict_auth_data_cert_trust(NSDictionary *dict);
-int verify_contact_signed_auth_data(NSData *authData);
-int verify_contact_signed_shortcut(const char *signedShortcutPath);
 
 #endif /* libshortcutsign_h */

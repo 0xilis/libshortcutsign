@@ -14,6 +14,8 @@ Statically provided as submodules:
 - libNeoAppleArchive
 - liblzfse
 
+libshortcutsign also currently requires [the Apple Root CA](https://www.apple.com/appleca/AppleIncRootCertificate.cer) to be downloaded and named "AppleRootCA.cer" for verification functions.
+
 # Compatibility
 
 ### App Store Guideline Friendly!
@@ -24,7 +26,7 @@ The great thing about this is that it means libshortcutsign can be used in an Ap
 ### Sadly, only Apple devices supported :(... or are they?
 Be aware though that unfortunately it is still restricted to iOS 15.0+ / macOS 12.0+. This is as libshortcutsign uses Security.framework as well as libAppleArchive.
 
-While Security.framework is open source and (if I remember correctly?) some GNUstep folks may have gotten some functionality on other platforms ex linux, libAppleArchive is fully closed source sadly, and I doubt anyone would go through the pain of reversing it... (it is certianly above my skill level).
+While Security.framework is open source and (if I remember correctly?) some GNUstep folks may have gotten some functionality on other platforms ex linux, libAppleArchive is fully closed source sadly, and I doubt anyone would go through the pain of reversing it... (it is certainly above my skill level). (UPDATE: I started work on my own Apple Archive parser, libNeoAppleArchive, and currently in the progress of implementing it into libshortcutsign to be xplat).
 
 **HOWEVER, there are some functions that ARE cross-platform.** I've made a list of these below.
 
@@ -33,9 +35,11 @@ While Security.framework is open source and (if I remember correctly?) some GNUs
 | sign_shortcut_with_private_key_and_auth_data | NO | libAppleArchive & Security.framework needed |
 | auth_data_from_shortcut | YES | No issues! |
 | extract_signed_shortcut | YES | No issues! |
-| verify_contact_signed_auth_data | YES w/GNUstep | Security.framework use |
-| verify_contact_signed_shortcut | YES w/GNUstep | Security.framework use |
+| verify_contact_signed_auth_data | YES | Currently only supports contact-signed shortcuts |
+| verify_contact_signed_shortcut | YES | Currently only supports contact-signed shortcuts |
 | resign_shortcut_with_new_aa | YES | Not yet stable |
+
+(Special note about verify_ functions: CMS AppleIDValidationRecord checking is currently not implemented, meaning it is possible for someone to change the phone number hash / email hash associated with a contact signed shortcut. This will be implemented in the future)
 
 # Signing
 libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file. **Notice for usage: the passed in unsignedShortcutPath must point to a directory that contains the unsigned shortcut file, not to the directory itself. The directory must only contain the unsigned shortcut as "Shortcut.wflow" and nothing else. If you name it something different, shortcuts fails to decrypt it.**
