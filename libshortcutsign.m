@@ -11,7 +11,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #import <Security/Security.h>
 
-#include "xplat.h"
+#include "extract.h"
 
 #ifndef COMPRESSION_LZFSE
 #define COMPRESSION_LZFSE 0x801

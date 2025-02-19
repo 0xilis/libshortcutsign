@@ -14,7 +14,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #import <Security/Security.h>
 
-#include "xplat.h"
+#include "extract.h"
 
 int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *authData, const char *unsignedShortcutPath, const char *destPath);
 NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain);
