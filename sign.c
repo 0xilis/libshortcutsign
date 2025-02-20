@@ -8,6 +8,7 @@
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 #include <openssl/ec.h>
+#include <openssl/kdf.h>
 #include "build/lzfse/include/lzfse.h"
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
@@ -90,6 +91,57 @@ void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key
     }
 
     return output;
+}
+
+/* Helper function #2 to perform HKDF using OpenSSL */
+int hkdf_extract_and_expand_helper2(const uint8_t *salt, size_t salt_len,
+                            const uint8_t *key, size_t key_len,
+                            const uint8_t *info, size_t info_len,
+                            uint8_t *out, size_t out_len) {
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+    if (!ctx) {
+        fprintf(stderr, "Failed to create HKDF context\n");
+        return 0;
+    }
+
+    if (EVP_PKEY_derive_init(ctx) <= 0) {
+        fprintf(stderr, "Failed to initialize HKDF context\n");
+        EVP_PKEY_CTX_free(ctx);
+        return 0;
+    }
+
+    if (EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) <= 0) {
+        fprintf(stderr, "Failed to set HKDF hash function\n");
+        EVP_PKEY_CTX_free(ctx);
+        return 0;
+    }
+
+    if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, salt_len) <= 0) {
+        fprintf(stderr, "Failed to set HKDF salt\n");
+        EVP_PKEY_CTX_free(ctx);
+        return 0;
+    }
+
+    if (EVP_PKEY_CTX_set1_hkdf_key(ctx, key, key_len) <= 0) {
+        fprintf(stderr, "Failed to set HKDF key\n");
+        EVP_PKEY_CTX_free(ctx);
+        return 0;
+    }
+
+    if (EVP_PKEY_CTX_add1_hkdf_info(ctx, info, info_len) <= 0) {
+        fprintf(stderr, "Failed to set HKDF info\n");
+        EVP_PKEY_CTX_free(ctx);
+        return 0;
+    }
+
+    if (EVP_PKEY_derive(ctx, out, &out_len) <= 0) {
+        fprintf(stderr, "Failed to derive HKDF output\n");
+        EVP_PKEY_CTX_free(ctx);
+        return 0;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return 1;
 }
 
 void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
@@ -211,20 +263,24 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
 
     /* Prepare HKDF context */
     const uint8_t *salt = (uint8_t *)(aeaShortcutArchive + auth_data_size + 0xac);
+    const uint8_t *keyDerivationKey = (uint8_t *)(aeaShortcutArchive + auth_data_size + 0x8c); // 32-byte key
     uint8_t context[0x4c] = {0};
     memcpy(context, "AEA_AMK", 7);
-    memcpy(context + 11, privateKey, 0x41); /* Copy public part of private key */
+    memcpy(context + 11, privateKey, 0x41); // Copy public part of private key
 
     /* Derive key using OpenSSL HKDF */
-    uint8_t *derivedKey = malloc(0x100);
-    uint8_t *hkdf_output = hkdf_extract_and_expand(salt, 32, context, sizeof(context), 32);
-    if (hkdf_output) {
-        memcpy(derivedKey, hkdf_output, 32);
-        free(hkdf_output);
-    } else {
+    uint8_t derivedKey[32];
+    if (!hkdf_extract_and_expand_helper2(salt, 32, keyDerivationKey, 32, context, sizeof(context), derivedKey, 32)) {
         fprintf(stderr, "HKDF derivation failed\n");
         exit(1);
     }
+
+    /* Print derived key for debugging */
+    /*printf("derivedKey: ");
+    for (int i = 0; i < 32; i++) {
+        printf("%02x", derivedKey[i]);
+    }
+    printf("\n");*/
 
     /*
      * before doing hmac, update the size in prolouge
