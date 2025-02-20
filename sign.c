@@ -94,7 +94,11 @@ void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key
 
 void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
     /* Update signature field and delete certain portions of the archive */
-    size_t auth_data_size = * (unsigned char *)(aeaShortcutArchive + 0xB); 
+    register const uint8_t *sptr = (const uint8_t *)(aeaShortcutArchive + 0xB);
+    size_t auth_data_size = *sptr << 24;
+    auth_data_size += *(sptr - 1) << 16;
+    auth_data_size += *(sptr - 2) << 8;
+    auth_data_size += *(sptr - 3);
     memset(aeaShortcutArchive + auth_data_size + 0xc, 0, 128);  /* Zero out the signature */
 
     /* Perform SHA-256 on the modified archive */
