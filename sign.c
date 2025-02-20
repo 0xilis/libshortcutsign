@@ -160,7 +160,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     }
 
     /* Extract auth_data_size from aeaShortcutArchive */
-    register const char *sptr = aeaShortcutArchive + 0xB;
+    register const uint8_t *sptr = (const uint8_t *)(aeaShortcutArchive + 0xB);
     size_t auth_data_size = *sptr << 24;
     auth_data_size += *(sptr - 1) << 16;
     auth_data_size += *(sptr - 2) << 8;

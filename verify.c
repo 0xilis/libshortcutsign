@@ -215,7 +215,7 @@ RSA *get_public_key_from_cert_rsa(const uint8_t *cert_data, size_t cert_size) {
 /* Function to parse the plist file and extract the AppleIDCertificateChain */
 int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***cert_data_array, size_t *cert_count, size_t **certSizesList) {
     plist_t plist;
-    if (plist_from_memory(authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
+    if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");
         return -1;
     }
@@ -247,7 +247,7 @@ int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t *
         }
 
         uint8_t *cert_data;
-        uint32_t cert_size;
+        uint64_t cert_size;
         plist_get_data_val(cert_item, &cert_data, &cert_size);
 
         (*cert_data_array)[i] = malloc(cert_size);
@@ -286,7 +286,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
 
     /* Parse the plist to extract the SigningPublicKey and SigningPublicKeySignature */
     plist_t plist;
-    if (plist_from_memory(authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
+    if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");
         return -1;
     }
@@ -299,7 +299,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         return -1;
     }
     uint8_t *signing_public_key;
-    uint32_t signing_public_key_len;
+    uint64_t signing_public_key_len;
     plist_get_data_val(signing_public_key_item, &signing_public_key, &signing_public_key_len);
 
     /* Extract SigningPublicKeySignature */
@@ -310,7 +310,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         return -1;
     }
     uint8_t *signing_public_key_signature;
-    uint32_t signing_public_key_signature_len;
+    uint64_t signing_public_key_signature_len;
     plist_get_data_val(signing_public_key_signature_item, &signing_public_key_signature, &signing_public_key_signature_len);
 
     /* Extract the root certificate (first in the chain) and get the EC public key */
