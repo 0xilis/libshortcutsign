@@ -132,7 +132,7 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
             printf("Could not get PAT entry in header\n");
             continue;
         }
-        if (strncmp(pathString,patStr,strlen(patStr)) == 0) {
+        if (strncmp(pathString,patStr,strlen(pathString)) == 0) {
             free(patStr);
             /* Unwrap file */
             FILE *fp = fopen(outputPath, "w");
