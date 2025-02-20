@@ -92,7 +92,7 @@ void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key
     return output;
 }
 
-void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
+void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
     /* Update signature field and delete certain portions of the archive */
     size_t auth_data_size = * (unsigned char *)(aeaShortcutArchive + 0xB); 
     memset(aeaShortcutArchive + auth_data_size + 0xc, 0, 128);  /* Zero out the signature */
@@ -108,17 +108,54 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey, size_t
     EVP_DigestFinal_ex(sha256_ctx, sha256_hash, NULL);
     EVP_MD_CTX_free(sha256_ctx);
 
-    /* Convert the raw private key to an EVP_PKEY */
+    /* Parse the raw ASN.1 private key */
     const unsigned char *priv_key_ptr = (unsigned char *)privateKey;
-    EVP_PKEY *private_key = NULL;
-    EC_KEY *ec_key = d2i_ECPrivateKey(NULL, &priv_key_ptr, privateKeyLen);
-    if (!ec_key) {
-        fprintf(stderr, "Failed to load EC private key from buffer\n");
+    BIGNUM *priv_key_bn = BN_bin2bn(priv_key_ptr, privateKeyLen, NULL);
+    if (!priv_key_bn) {
+        fprintf(stderr, "Failed to parse raw ASN.1 private key\n");
         return;
     }
 
-    private_key = EVP_PKEY_new();
-    EVP_PKEY_assign_EC_KEY(private_key, ec_key);  /* Assign the EC key to the EVP_PKEY structure */
+    /* Create an EC_KEY object */
+    EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1); // P-256 curve
+    if (!ec_key) {
+        fprintf(stderr, "Failed to create EC_KEY object: %s\n", ERR_error_string(ERR_get_error(), NULL));
+        BN_free(priv_key_bn);
+        return;
+    }
+
+    /* Set the private key in the EC_KEY object */
+    if (!EC_KEY_set_private_key(ec_key, priv_key_bn)) {
+        fprintf(stderr, "Failed to set private key in EC_KEY: %s\n", ERR_error_string(ERR_get_error(), NULL));
+        EC_KEY_free(ec_key);
+        BN_free(priv_key_bn);
+        return;
+    }
+
+    /* Create a public key from the private key */
+    if (!EC_KEY_generate_key(ec_key)) {
+        fprintf(stderr, "Failed to generate public key from private key: %s\n", ERR_error_string(ERR_get_error(), NULL));
+        EC_KEY_free(ec_key);
+        BN_free(priv_key_bn);
+        return;
+    }
+
+    /* Assign the EC_KEY to an EVP_PKEY */
+    EVP_PKEY *private_key = EVP_PKEY_new();
+    if (!private_key) {
+        fprintf(stderr, "Failed to create EVP_PKEY: %s\n", ERR_error_string(ERR_get_error(), NULL));
+        EC_KEY_free(ec_key);
+        BN_free(priv_key_bn);
+        return;
+    }
+
+    if (!EVP_PKEY_assign_EC_KEY(private_key, ec_key)) {
+        fprintf(stderr, "Failed to assign EC_KEY to EVP_PKEY: %s\n", ERR_error_string(ERR_get_error(), NULL));
+        EC_KEY_free(ec_key);
+        EVP_PKEY_free(private_key);
+        BN_free(priv_key_bn);
+        return;
+    }
 
     /* Sign the hash with the private key using OpenSSL */
     EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
@@ -142,10 +179,6 @@ void resign_shortcut_prologue(char *aeaShortcutArchive, void *privateKey, size_t
     free(signature);
     EVP_PKEY_free(private_key);
 }
-
-
-
-
 
 void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, const char *outputPath, void *privateKey) {
     /* TODO: This code is really hard to understand */
@@ -192,6 +225,13 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
         exit(1);
     }
 
+    /*
+     * before doing hmac, update the size in prolouge
+     */
+    memcpy(aeaShortcutArchive + auth_data_size + 0x13c + 4, &compressed_size, 4);
+    size_t resigned_shortcut_size = auth_data_size + 0x495c + compressed_size;
+    memcpy(aeaShortcutArchive + auth_data_size + 0xec + 8, &resigned_shortcut_size, 4);
+
     /* Derive more keys using HKDF (AEA_CK, AEA_SK, etc.) */
     void *aea_ck_ctx = malloc(10);
     memcpy(aea_ck_ctx, "AEA_CK", 6);
@@ -228,6 +268,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     free(chekPlusAuthData);
     free(hmac);
     free(aea_rhek);
+    resign_shortcut_prologue(aeaShortcutArchive, privateKey, 97);
 
     /* Write the final resigned archive to output file */
     FILE *fp = fopen(outputPath, "w");
