@@ -12,32 +12,32 @@
 #include "build/lzfse/include/lzfse.h"
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
-    unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);  /* HMAC output size for SHA256 is 32 bytes. */
-    size_t len = SHA256_DIGEST_LENGTH;
-
-    /* Fetch the HMAC algorithm */
-    EVP_MAC *hmac_type = EVP_MAC_fetch(NULL, "HMAC", NULL);
-    if (!hmac_type) {
-        fprintf(stderr, "Failed to fetch HMAC\n");
-        return NULL;
-    }
-
-    /* Create a MAC context with the HMAC algorithm */
-    EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(hmac_type);
+    unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
+    HMAC_CTX *ctx = HMAC_CTX_new();
     if (!ctx) {
-        fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
-        EVP_MAC_free(hmac_type);
+        fprintf(stderr, "Failed to create HMAC context\n");
         return NULL;
     }
 
-    /* Initialize the MAC context with the key */
-    EVP_MAC_init(ctx, hkdf_key, 32, NULL);
-    EVP_MAC_update(ctx, data2, data2Len);
-    EVP_MAC_update(ctx, data1, data1Len);
-    EVP_MAC_final(ctx, hmac, &len, SHA256_DIGEST_LENGTH);
+    /* Initialize HMAC with SHA-256 */
+    if (!HMAC_Init_ex(ctx, hkdf_key, 32, EVP_sha256(), NULL)) {
+        fprintf(stderr, "Failed to initialize HMAC\n");
+        HMAC_CTX_free(ctx);
+        return NULL;
+    }
 
-    EVP_MAC_CTX_free(ctx);
-    EVP_MAC_free(hmac_type);
+    /* Update HMAC with data */
+    if (data2 && data2Len > 0) {
+        HMAC_Update(ctx, data2, data2Len);
+    }
+    if (data1 && data1Len > 0) {
+        HMAC_Update(ctx, data1, data1Len);
+    }
+
+    /* Finalize HMAC */
+    unsigned int len = SHA256_DIGEST_LENGTH;
+    HMAC_Final(ctx, hmac, &len);
+    HMAC_CTX_free(ctx);
 
     return hmac;
 }
