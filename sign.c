@@ -356,7 +356,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     uint8_t *chekPlusAuthData = malloc(auth_data_size + 32);
     memcpy(chekPlusAuthData, aeaShortcutArchive + auth_data_size + 0x11c, 32);
     memcpy(chekPlusAuthData + 32, aeaShortcutArchive + 0xc, auth_data_size);
-    hmac = hmac_derive(aea_rhek, aeaShortcutArchive + auth_data_size + 0xec, 0x30, chekPlusAuthData, auth_data_size + 0x20c);
+    hmac = hmac_derive(aea_rhek, aeaShortcutArchive + auth_data_size + 0xec, 0x30, chekPlusAuthData, auth_data_size + 0x20);
     memcpy(aeaShortcutArchive + auth_data_size + 0xcc, hmac, 32);
     free(chekPlusAuthData);
     free(hmac);
