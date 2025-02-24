@@ -342,7 +342,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     uint8_t *hmac = hmac_derive(aea_sk, aeaShortcutArchive + auth_data_size + 0x495c, compressed_size, 0, 0);
 
     /* Replace old hmac in binary data */
-    memcpy(aeaShortcutArchive + auth_data_size + 0x295c, hmac, 0x2000);
+    memcpy(aeaShortcutArchive + auth_data_size + 0x295c, hmac, 32);
     free(hmac);
     free(aea_sk);
 
