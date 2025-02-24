@@ -23,12 +23,10 @@ While libshortcutsign is based off of some WorkflowKit methods, **libshortcutsig
 
 The great thing about this is that it means libshortcutsign can be used in an App Store application, since it never uses private frameworks.
 
-### Sadly, only Apple devices supported :(... or are they?
-Be aware though that unfortunately it is still restricted to iOS 15.0+ / macOS 12.0+. This is as libshortcutsign uses Security.framework as well as libAppleArchive.
+### Cross-platform! (Mostly)
+Be aware that direct signing using the sign_shortcut_with_private_key_and_auth_data is currently restricted to iOS 15.0+ / macOS 12.0+. This is as libshortcutsign uses Security.framework as well as libAppleArchive. It is possible to use `resign_shortcut_with_new_aa` and replace the shortcut actions in the signed shortcut with another shortcut however, which I demo in my [shortcut-sign](https://github.com/0xilis/shortcut-sign) CLI.
 
-While Security.framework is open source and (if I remember correctly?) some GNUstep folks may have gotten some functionality on other platforms ex linux, libAppleArchive is fully closed source sadly, and I doubt anyone would go through the pain of reversing it... (it is certainly above my skill level). (UPDATE: I started work on my own Apple Archive parser, libNeoAppleArchive, and currently in the progress of implementing it into libshortcutsign to be xplat).
-
-**HOWEVER, there are some functions that ARE cross-platform.** I've made a list of these below.
+**HOWEVER, all other functions are cross platform.** Check out the list.
 
 | Function     | Universal | Notes |
 |--------------|:---------:|-----------:|
@@ -37,7 +35,7 @@ While Security.framework is open source and (if I remember correctly?) some GNUs
 | extract_signed_shortcut | YES | No issues! |
 | verify_contact_signed_auth_data | YES | Currently only supports contact-signed shortcuts |
 | verify_contact_signed_shortcut | YES | Currently only supports contact-signed shortcuts |
-| resign_shortcut_with_new_aa | YES | Not yet stable |
+| resign_shortcut_with_new_aa | YES | No issues! |
 
 (Special note about verify_ functions: CMS AppleIDValidationRecord checking is currently not implemented, meaning it is possible for someone to change the phone number hash / email hash associated with a contact signed shortcut. This will be implemented in the future)
 
@@ -46,7 +44,11 @@ libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, 
 
 libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/seemoo-lab/airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) ) contact sign a shortcut.
 
-Be aware you'll need to construct the auth data yourself; you can try extracting the auth data from another contact signed shortcut (ex using libshortcutsign's own `auth_data_from_shortcut`) to get a better understanding. You can also try [https://github.com/0xilis/QuickMergeHelper/tree/main/QuickMerge%20Helper/libqmc](libqmc) to use the auth data from a qmc file.
+Be aware you'll need to construct the auth data yourself; you can try extracting the auth data from another contact signed shortcut (ex using libshortcutsign's own `auth_data_from_shortcut`) to get a better understanding. You can also try [libqmc](https://github.com/0xilis/QuickMergeHelper/tree/main/QuickMerge%20Helper/libqmc) to use the auth data from a qmc file.
+
+# CLI tool
+
+I have made an official CLI tool using libshortcutsign that works on Linux and macOS, that being [shortcut-sign](https://github.com/0xilis/shortcut-sign). Much like libshortcutsign it is fully open source, although pre-compiled binaries are also available in the releases tab for x86_64 Linux+macOS.
 
 # Compiling
 
