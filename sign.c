@@ -43,59 +43,68 @@ void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, siz
     return hmac;
 }
 
-void *hkdf_extract_and_expand(const void *salt, size_t salt_len, const void *key, size_t key_len, size_t output_len) {
-    unsigned char *output = malloc(output_len);
-    unsigned char prk[SHA256_DIGEST_LENGTH];
-    size_t len = SHA256_DIGEST_LENGTH;
-
-    /* Fetch the HMAC algorithm */
-    EVP_MAC *hmac_type = EVP_MAC_fetch(NULL, "HMAC", NULL);
-    if (!hmac_type) {
-        fprintf(stderr, "Failed to fetch HMAC\n");
+void *do_hkdf(const void *context, size_t contextLen, const void *key) {
+    unsigned char *output = malloc(32);
+    if (!output) {
+        fprintf(stderr, "Failed to allocate memory for HKDF output\n");
         return NULL;
     }
 
-    /* Create a MAC context with the HMAC algorithm */
-    EVP_MAC_CTX *context = EVP_MAC_CTX_new(hmac_type);
-    if (!context) {
-        fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
-        EVP_MAC_free(hmac_type);
+    /* Create HKDF context */
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+    if (!ctx) {
+        fprintf(stderr, "Failed to create HKDF context\n");
+        free(output);
         return NULL;
     }
 
-    /* Extract phase: HMAC(salt, key) */
-    EVP_MAC_init(context, salt, salt_len, NULL);
-    EVP_MAC_update(context, key, key_len);
-    EVP_MAC_final(context, prk, &len, SHA256_DIGEST_LENGTH);
-
-    EVP_MAC_CTX_free(context);
-    EVP_MAC_free(hmac_type);
-
-    /* Expand phase: HMAC(prk, info, 0x01, 0x02, ...) to get multiple keys */
-    unsigned char counter = 1;
-    size_t pos = 0;
-    while (pos < output_len) {
-        EVP_MAC_CTX *expand_context = EVP_MAC_CTX_new(hmac_type);
-        if (!expand_context) {
-            fprintf(stderr, "Failed to create EVP_MAC_CTX\n");
-            return NULL;
-        }
-
-        EVP_MAC_init(expand_context, prk, SHA256_DIGEST_LENGTH, NULL);
-        EVP_MAC_update(expand_context, &counter, 1);
-        EVP_MAC_update(expand_context, (unsigned char*)&pos, sizeof(pos));
-        EVP_MAC_final(expand_context, output + pos, &len, SHA256_DIGEST_LENGTH);
-
-        EVP_MAC_CTX_free(expand_context);
-        pos += len;
-        counter++;
+    /* Initialize HKDF */
+    if (EVP_PKEY_derive_init(ctx) <= 0) {
+        fprintf(stderr, "Failed to initialize HKDF context\n");
+        EVP_PKEY_CTX_free(ctx);
+        free(output);
+        return NULL;
     }
 
+    /* Set HKDF hash function to SHA-256 */
+    if (EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) <= 0) {
+        fprintf(stderr, "Failed to set HKDF hash function\n");
+        EVP_PKEY_CTX_free(ctx);
+        free(output);
+        return NULL;
+    }
+
+    /* Set HKDF key (input key material) */
+    if (EVP_PKEY_CTX_set1_hkdf_key(ctx, key, 32) <= 0) {
+        fprintf(stderr, "Failed to set HKDF key\n");
+        EVP_PKEY_CTX_free(ctx);
+        free(output);
+        return NULL;
+    }
+
+    /* Set HKDF info (context) */
+    if (EVP_PKEY_CTX_add1_hkdf_info(ctx, context, contextLen) <= 0) {
+        fprintf(stderr, "Failed to set HKDF info\n");
+        EVP_PKEY_CTX_free(ctx);
+        free(output);
+        return NULL;
+    }
+
+    /* Derive the output key */
+    size_t out_len = 32;
+    if (EVP_PKEY_derive(ctx, output, &out_len) <= 0) {
+        fprintf(stderr, "Failed to derive HKDF output\n");
+        EVP_PKEY_CTX_free(ctx);
+        free(output);
+        return NULL;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
     return output;
 }
 
-/* Helper function #2 to perform HKDF using OpenSSL */
-int hkdf_extract_and_expand_helper2(const uint8_t *salt, size_t salt_len,
+/* Helper function to perform HKDF using OpenSSL */
+int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
                             const uint8_t *key, size_t key_len,
                             const uint8_t *info, size_t info_len,
                             uint8_t *out, size_t out_len) {
@@ -307,7 +316,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
 
     /* Derive key using OpenSSL HKDF */
     uint8_t derivedKey[32];
-    if (!hkdf_extract_and_expand_helper2(salt, 32, keyDerivationKey, 32, context, sizeof(context), derivedKey, 32)) {
+    if (!hkdf_extract_and_expand_helper(salt, 32, keyDerivationKey, 32, context, sizeof(context), derivedKey, 32)) {
         fprintf(stderr, "HKDF derivation failed\n");
         exit(1);
     }
@@ -330,11 +339,11 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     void *aea_ck_ctx = malloc(10);
     memcpy(aea_ck_ctx, "AEA_CK", 6);
     memset(aea_ck_ctx + 6, 0, 4);
-    uint8_t *aea_ck = hkdf_extract_and_expand(derivedKey, 32, aea_ck_ctx, 10, 32);
+    uint8_t *aea_ck = do_hkdf(aea_ck_ctx, 10, derivedKey);
     void *aea_sk_ctx = malloc(10);
     memcpy(aea_sk_ctx, "AEA_SK", 6);
     memset(aea_sk_ctx + 6, 0, 4);
-    uint8_t *aea_sk = hkdf_extract_and_expand(aea_ck, 32, aea_sk_ctx, 10, 32);
+    uint8_t *aea_sk = do_hkdf(aea_sk_ctx, 10, aea_ck);
     free(aea_ck_ctx);
     free(aea_sk_ctx);
 
@@ -347,13 +356,13 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     free(aea_sk);
 
     /* Re-hmac for AEA_CHEK */
-    uint8_t *aea_chek = hkdf_extract_and_expand(aea_ck, 32, "AEA_CHEK", 8, 32);
+    uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
     hmac = hmac_derive(aea_chek, aeaShortcutArchive + auth_data_size + 0x13c, 0x2800, aeaShortcutArchive + auth_data_size + 0x293c, 0x2020);
     memcpy(aeaShortcutArchive + auth_data_size + 0x11c, hmac, 32);
     free(hmac);
 
     /* Re-hmac for AEA_RHEK */
-    uint8_t *aea_rhek = hkdf_extract_and_expand(derivedKey, 32, "AEA_RHEK", 8, 32);
+    uint8_t *aea_rhek = do_hkdf("AEA_RHEK", 8, derivedKey);
     uint8_t *chekPlusAuthData = malloc(auth_data_size + 32);
     memcpy(chekPlusAuthData, aeaShortcutArchive + auth_data_size + 0x11c, 32);
     memcpy(chekPlusAuthData + 32, aeaShortcutArchive + 0xc, auth_data_size);
