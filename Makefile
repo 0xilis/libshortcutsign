@@ -22,9 +22,9 @@ output: $(buildDir)
 		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os;\
 	fi
 
-	@$(CC) -c extract.c -o build/obj/extract.o -Os
-	@$(CC) -c sign.c -o build/obj/sign.o -Os
-	@$(CC) -c verify.c -o build/obj/verify.o -Os
+	@$(CC) -c extract.c -o build/obj/extract.o -Os -std=c89
+	@$(CC) -c sign.c -o build/obj/sign.o -Os -std=c89
+	@$(CC) -c verify.c -o build/obj/verify.o -Os -std=c89
 	@cd ..
 	@ar rcs build/usr/lib/libshortcutsign.a build/obj/*.o
 

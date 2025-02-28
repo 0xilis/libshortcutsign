@@ -73,13 +73,13 @@ uint8_t *auth_data_from_shortcut(const char *filepath, size_t *bufferSize) {
     buf_size += *(sptr - 2) << 8;
     buf_size += *(sptr - 3);
     if (buf_size > archive_size-0x293c) {
-     /* 
-      * The encrypted data for for signed shortcuts, both contact signed
-      * and icloud signed, should be at buf_size+0x293c. If our buf_size
-      * reaches to or past the encrypted data, then it's too big.
-     */
-     fprintf(stderr,"libshortcutsign: buf_size reaches past data start\n");
-     return 0;
+        /* 
+         * The encrypted data for for signed shortcuts, both contact signed
+         * and icloud signed, should be at buf_size+0x293c. If our buf_size
+         * reaches to or past the encrypted data, then it's too big.
+        */
+        fprintf(stderr,"libshortcutsign: buf_size reaches past data start\n");
+        return 0;
     }
     /* we got buf_size, now fill buffer */
     uint8_t *buffer = (uint8_t *)malloc(buf_size);
@@ -114,7 +114,8 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
         fprintf(stderr,"Not enough free memory to allocate archive\n");
         return -1;
     }
-    for (int i = 0; i < archive->itemCount; i++) {
+    unsigned int i = 0;
+    for (i = 0; i < archive->itemCount; i++) {
         /*
          * We loop through all items to find the PAT field key.
          * The PAT field key will be what path the item is in the

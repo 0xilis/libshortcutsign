@@ -26,7 +26,8 @@ STACK_OF(X509) *load_certificate_chain(uint8_t **cert_data_array, size_t cert_co
         return NULL;
     }
 
-    for (size_t i = 0; i < cert_count; i++) {
+    size_t i;
+    for (i = 0; i < cert_count; i++) {
         const uint8_t *cert_data = cert_data_array[i];
         size_t cert_size = certSizesList[i];
 
@@ -238,7 +239,8 @@ int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t *
     *cert_data_array = malloc(sizeof(uint8_t*) * (*cert_count));
     *certSizesList = malloc(sizeof(size_t) * (*cert_count));
 
-    for (size_t i = 0; i < *cert_count; i++) {
+    size_t i;
+    for (i = 0; i < *cert_count; i++) {
         plist_t cert_item = plist_array_get_item(cert_chain, i);
         if (plist_get_node_type(cert_item) != PLIST_DATA) {
             fprintf(stderr, "Invalid certificate data in cert chain\n");
@@ -335,7 +337,8 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     }
 
     /* Free the allocated memory */
-    for (size_t i = 0; i < cert_count; i++) {
+    size_t i;
+    for (i = 0; i < cert_count; i++) {
         free(cert_data_array[i]);
     }
     free(cert_data_array);
