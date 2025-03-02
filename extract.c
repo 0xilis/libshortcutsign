@@ -16,7 +16,7 @@
  *
  * If it fails to get auth data, it will return 0/nil.
 */
-uint8_t *auth_data_from_shortcut(const char *filepath, size_t *bufferSize) {
+uint8_t *auth_data_from_shortcut(const char *filepath, size_t *authDataSize) {
     /* load shortcut into memory */
     FILE *fp = fopen(filepath, "r");
     if (!fp) {
@@ -63,27 +63,70 @@ uint8_t *auth_data_from_shortcut(const char *filepath, size_t *bufferSize) {
         }
         archive[n++] = (char) c;
     }
-    size_t archive_size = n;
+    size_t archiveSize = n;
     fclose(fp);
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
     /* We assume it's located at 0x8-0xB */
     register const char *sptr = archive + 0xB;
-    size_t buf_size = *sptr << 24;
-    buf_size += *(sptr - 1) << 16;
-    buf_size += *(sptr - 2) << 8;
-    buf_size += *(sptr - 3);
-    if (buf_size > archive_size-0x293c) {
+    size_t authDataSizeLocal = *sptr << 24;
+    authDataSizeLocal += *(sptr - 1) << 16;
+    authDataSizeLocal += *(sptr - 2) << 8;
+    authDataSizeLocal += *(sptr - 3);
+    if (authDataSizeLocal > archiveSize-0x293c) {
         /* 
          * The encrypted data for for signed shortcuts, both contact signed
-         * and icloud signed, should be at buf_size+0x293c. If our buf_size
+         * and icloud signed, should be at authDataSize+0x293c. If our authDataSize
          * reaches to or past the encrypted data, then it's too big.
         */
-        fprintf(stderr,"libshortcutsign: buf_size reaches past data start\n");
+        fprintf(stderr,"libshortcutsign: authDataSizeLocal reaches past data start\n");
         return 0;
     }
-    /* we got buf_size, now fill buffer */
-    uint8_t *buffer = (uint8_t *)malloc(buf_size);
-    memset(buffer, 0, buf_size);
+    /* we got authDataSizeLocal, now fill buffer */
+    uint8_t *authData = (uint8_t *)malloc(authDataSizeLocal);
+    /*
+     * the reason why we are doing a reverse
+     * iteration is because doing it this way
+     * will allow arm devices to take advantage
+     * of the cbnz instruction, which should
+     * mean about a 2 cycle save per iteration.
+     *
+     * also we're going to blindly trust that authDataSize
+     * is not larger than the buffer, because unless
+     * you malform a aea file it should never be.
+    */
+    unsigned int i = authDataSizeLocal;
+    fill_buffer:
+    i--;
+    authData[i] = archive[i+0xc];
+    if (i != 0) {goto fill_buffer;};
+    free(archive);
+    /* save bufferSize if it was specified */
+    if (authDataSize) {
+        *authDataSize = authDataSizeLocal;
+    }
+    return authData;
+}
+uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, size_t *authDataSize) {
+    char *archive = (char *)buffer;
+    size_t archiveSize = bufferSize;
+    /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
+    /* We assume it's located at 0x8-0xB */
+    register const char *sptr = archive + 0xB;
+    size_t _authDataSize = *sptr << 24;
+    _authDataSize += *(sptr - 1) << 16;
+    _authDataSize += *(sptr - 2) << 8;
+    _authDataSize += *(sptr - 3);
+    if (_authDataSize > archiveSize-0x293c) {
+        /* 
+         * The encrypted data for for signed shortcuts, both contact signed
+         * and icloud signed, should be at authDataSize+0x293c. If our authDataSize
+         * reaches to or past the encrypted data, then it's too big.
+        */
+        fprintf(stderr,"libshortcutsign: authDataSize reaches past data start\n");
+        return 0;
+    }
+    /* we got authDataSize, now fill buffer */
+    uint8_t *authData = (uint8_t *)malloc(_authDataSize);
     /*
      * the reason why we are doing a reverse
      * iteration is because doing it this way
@@ -95,17 +138,17 @@ uint8_t *auth_data_from_shortcut(const char *filepath, size_t *bufferSize) {
      * is not larger than the buffer, because unless
      * you malform a aea file it should never be.
     */
-    unsigned int i = buf_size;
+    unsigned int i = _authDataSize;
     fill_buffer:
     i--;
-    buffer[i] = archive[i+0xc];
+    authData[i] = archive[i+0xc];
     if (i != 0) {goto fill_buffer;};
     free(archive);
     /* save bufferSize if it was specified */
-    if (bufferSize) {
-        *bufferSize = buf_size;
+    if (authDataSize) {
+        *authDataSize = _authDataSize;
     }
-    return buffer;
+    return authData;
 }
 
 int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char *pathString, size_t bufferSize) {

@@ -10,6 +10,7 @@
 #include <openssl/err.h>
 #include <inttypes.h>
 #include "extract.h"
+#include "verify.h"
 
 /*
  * NOTE: THIS CODE IS VERY INCOMPLETE AND BAD.
@@ -250,7 +251,7 @@ int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t *
 
         uint8_t *cert_data;
         uint64_t cert_size;
-        plist_get_data_val(cert_item, &cert_data, &cert_size);
+        plist_get_data_val(cert_item, (char **)&cert_data, &cert_size);
 
         (*cert_data_array)[i] = malloc(cert_size);
         (*certSizesList)[i] = cert_size;
@@ -302,7 +303,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     }
     uint8_t *signing_public_key;
     uint64_t signing_public_key_len;
-    plist_get_data_val(signing_public_key_item, &signing_public_key, &signing_public_key_len);
+    plist_get_data_val(signing_public_key_item, (char **)&signing_public_key, &signing_public_key_len);
 
     /* Extract SigningPublicKeySignature */
     plist_t signing_public_key_signature_item = plist_dict_get_item(plist, "SigningPublicKeySignature");
@@ -313,7 +314,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     }
     uint8_t *signing_public_key_signature;
     uint64_t signing_public_key_signature_len;
-    plist_get_data_val(signing_public_key_signature_item, &signing_public_key_signature, &signing_public_key_signature_len);
+    plist_get_data_val(signing_public_key_signature_item, (char **)&signing_public_key_signature, &signing_public_key_signature_len);
 
     /* Extract the root certificate (first in the chain) and get the EC public key */
     RSA *root_cert_public_key = NULL;
@@ -381,4 +382,46 @@ int verify_contact_signed_shortcut(const char *signedShortcutPath) {
         return -1;
     }
     return verify_contact_signed_auth_data(authData, authDataSize);
+}
+
+SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
+    if (bufferSize < 6) {
+        fprintf(stderr,"libshortcutsign: buffer too small\n");
+        return SHORTCUT_UNKNOWN_FORMAT;
+    }
+    /* First see if it's bplist or plist */
+    if (strcmp((char *)buffer, "bplist") == 0) {
+        return SHORTCUT_UNSIGNED;
+    }
+    if (strcmp((char *)buffer, "<?xml") == 0) {
+        return SHORTCUT_UNSIGNED;
+    }
+    /* check signed shortcut */
+    size_t authDataSize;
+    uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
+    if (!authData || !authDataSize) {
+        fprintf(stderr,"libshortcutsign: get_shortcut_format failed to extract authData\n");
+        return SHORTCUT_UNKNOWN_FORMAT;
+    }
+
+    plist_t plist;
+    if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
+        fprintf(stderr, "Failed to read plist from file\n");
+        return SHORTCUT_UNKNOWN_FORMAT;
+    }
+
+    plist_t cert_chain = plist_dict_get_item(plist, "SigningCertificateChain");
+    if (cert_chain) {
+        plist_free(plist);
+        return SHORTCUT_SIGNED_ICLOUD;
+    }
+
+    cert_chain = plist_dict_get_item(plist, "AppleIDCertificateChain");
+    if (!cert_chain || plist_get_node_type(cert_chain) != PLIST_ARRAY) {
+        fprintf(stderr, "Invalid plist format or missing cert chain\n");
+        plist_free(plist);
+        return SHORTCUT_UNKNOWN_FORMAT;
+    }
+
+    return SHORTCUT_SIGNED_CONTACT;
 }

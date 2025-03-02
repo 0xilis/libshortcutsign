@@ -33,7 +33,7 @@ void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, siz
     if (data1 && data1Len > 0) {
         HMAC_Update(ctx, data1, data1Len);
     }
-    HMAC_Update(ctx, &data2Len, 8);
+    HMAC_Update(ctx, (const unsigned char *)&data2Len, 8);
 
     /* Finalize HMAC */
     unsigned int len = SHA256_DIGEST_LENGTH;

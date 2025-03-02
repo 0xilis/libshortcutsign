@@ -20,4 +20,6 @@ typedef enum {
     SHORTCUT_SIGNED_ICLOUD = 3,
 } SSFormat;
 
+SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize);
+
 #endif /* libshortcutsign_verify_h */

@@ -22,9 +22,11 @@ output: $(buildDir)
 		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os;\
 	fi
 
+	@ # declaring -Wdeprecated-declarations is temporary only so people using the library
+	@ # will not be bombarded with compilation warnings...
 	@$(CC) -c extract.c -o build/obj/extract.o -Os -std=c89
-	@$(CC) -c sign.c -o build/obj/sign.o -Os -std=c89
-	@$(CC) -c verify.c -o build/obj/verify.o -Os -std=c89
+	@$(CC) -c sign.c -o build/obj/sign.o -Os -std=c89 -Wno-deprecated-declarations
+	@$(CC) -c verify.c -o build/obj/verify.o -Os -std=c89 -Wno-deprecated-declarations
 	@cd ..
 	@ar rcs build/usr/lib/libshortcutsign.a build/obj/*.o
 
