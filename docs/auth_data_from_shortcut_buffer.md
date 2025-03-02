@@ -23,4 +23,4 @@ A newly allocated buffer containing the auth data. If the function cannot alloca
 
 ## Note
 
-For the same functionality but from a path, check out [auth_data_from_shortcut.md](auth_data_from_shortcut).
+For the same functionality but from a path, check out [auth_data_from_shortcut](auth_data_from_shortcut.md).
