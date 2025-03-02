@@ -172,13 +172,13 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
     BIGNUM *pub_key_bn = BN_bin2bn(priv_key_ptr + 1, 64, NULL);
     if (!pub_key_bn) {
         fprintf(stderr, "shortcut-sign: failed to parse raw public key\n");
-        return;
+        return -1;
     }
 
     BIGNUM *priv_key_bn = BN_bin2bn(priv_key_ptr + 0x41, 32, NULL);
     if (!priv_key_bn) {
         fprintf(stderr, "shortcut-sign: failed to parse raw private key\n");
-        return;
+        return -1;
     }
 
     /* create an EC_KEY object for the secp256r1 curve */
@@ -186,7 +186,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
     if (!ec_key) {
         fprintf(stderr, "shortcut-sign: failed to create EC_KEY object\n");
         BN_free(priv_key_bn);
-        return;
+        return -1;
     }
 
     /* set the public key in the EC_KEY object */
@@ -194,7 +194,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         fprintf(stderr, "shortcut-sign: failed to set public key in EC_KEY\n");
         BN_free(priv_key_bn);
         EC_KEY_free(ec_key);
-        return;
+        return -1;
     }
 
     /* set the private key in the EC_KEY object */
@@ -202,7 +202,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         fprintf(stderr, "shortcut-sign: failed to set private key in EC_KEY\n");
         BN_free(priv_key_bn);
         EC_KEY_free(ec_key);
-        return;
+        return -1;
     }
 
     /* assign the EC_KEY to an EVP_PKEY object */
@@ -211,7 +211,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         fprintf(stderr, "shortcut-sign: failed to create EVP_PKEY object\n");
         BN_free(priv_key_bn);
         EC_KEY_free(ec_key);
-        return;
+        return -1;
     }
 
     if (!EVP_PKEY_assign_EC_KEY(private_key, ec_key)) {
@@ -219,7 +219,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         BN_free(priv_key_bn);
         EC_KEY_free(ec_key);
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
 
     /* sign the sha256 hash */
@@ -227,21 +227,21 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
     if (!md_ctx) {
         fprintf(stderr, "shortcut-sign: failed to create EVP_MD_CTX_new\n");
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
 
     if (EVP_SignInit(md_ctx, EVP_sha256()) != 1) {
         fprintf(stderr, "shortcut-sign: EVP_SignInit failed\n");
         EVP_MD_CTX_free(md_ctx);
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
 
     if (EVP_SignUpdate(md_ctx, aeaShortcutArchive, auth_data_size + 0x13c) != 1) {
         fprintf(stderr, "shortcut-sign: EVP_SignUpdate failed\n");
         EVP_MD_CTX_free(md_ctx);
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
 
     unsigned char *signature = malloc(EVP_PKEY_size(private_key));
@@ -249,7 +249,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         fprintf(stderr, "shortcut-sign: not enough memory\n");
         EVP_MD_CTX_free(md_ctx);
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
 
     unsigned int sig_len;
@@ -259,7 +259,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         free(signature);
         EVP_MD_CTX_free(md_ctx);
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
     EVP_MD_CTX_free(md_ctx);
 
@@ -268,7 +268,7 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
         fprintf(stderr, "shortcut-sign: sig_len exceeds 128 bytes\n");
         free(signature);
         EVP_PKEY_free(private_key);
-        return;
+        return -1;
     }
 
     /* overwrite the signature field in the archive with the new signature */
@@ -277,9 +277,10 @@ void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, siz
     /* clean up */
     free(signature);
     EVP_PKEY_free(private_key);
+    return 0;
 }
 
-void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, const char *outputPath, void *privateKey) {
+int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, const char *outputPath, void *privateKey) {
     /* TODO: This code is really hard to understand */
     size_t archivedDirSize = aeaShortcutArchiveSize;
     size_t compressed_size = archivedDirSize * 2;
@@ -288,7 +289,7 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     free(archivedDir);
     if (!buffer) {
         fprintf(stderr,"libshortcutsign: failed to compress LZFSE\n");
-        exit(1);
+        return -1;
     }
 
     /* Extract auth_data_size from aeaShortcutArchive */
@@ -318,15 +319,8 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     uint8_t derivedKey[32];
     if (!hkdf_extract_and_expand_helper(salt, 32, keyDerivationKey, 32, context, sizeof(context), derivedKey, 32)) {
         fprintf(stderr, "HKDF derivation failed\n");
-        exit(1);
+        return -1;
     }
-
-    /* Print derived key for debugging */
-    /*printf("derivedKey: ");
-    for (int i = 0; i < 32; i++) {
-        printf("%02x", derivedKey[i]);
-    }
-    printf("\n");*/
 
     /*
      * before doing hmac, update the size in prolouge
@@ -371,16 +365,21 @@ void resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir,
     free(chekPlusAuthData);
     free(hmac);
     free(aea_rhek);
-    resign_shortcut_prologue(aeaShortcutArchive, privateKey, 97);
+    if (resign_shortcut_prologue(aeaShortcutArchive, privateKey, 97)) {
+        free(aeaShortcutArchive);
+        fprintf(stderr,"libshortcutsign: failed to resign prologue\n");
+        return -1;
+    }
 
     /* Write the final resigned archive to output file */
     FILE *fp = fopen(outputPath, "w");
     if (!fp) {
         free(aeaShortcutArchive);
         fprintf(stderr,"libshortcutsign: failed to open destPath\n");
-        exit(1);
+        return -1;
     }
     fwrite(aeaShortcutArchive, auth_data_size + 0x495c + compressed_size, 1, fp);
     fclose(fp);
     free(aeaShortcutArchive);
+    return 0;
 }

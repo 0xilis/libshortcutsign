@@ -16,9 +16,9 @@
  *
  * If it fails to get auth data, it will return 0/nil.
 */
-uint8_t *auth_data_from_shortcut(const char *filepath, size_t *authDataSize) {
+uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     /* load shortcut into memory */
-    FILE *fp = fopen(filepath, "r");
+    FILE *fp = fopen(path, "r");
     if (!fp) {
         fprintf(stderr,"libshortcutsign: failed to open file\n");
         return 0;
@@ -310,6 +310,6 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
  * If the function was successful, it will return 0.
  * If not, it will return a negative error code.
 */
-int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath) {
+int __attribute__((deprecated)) extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath) {
     return extract_signed_shortcut(signedShortcutPath, destPath);
 }
