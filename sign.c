@@ -154,7 +154,7 @@ int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
     return 1;
 }
 
-void resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
+int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
     /* TODO: Don't just support X9.63 keys, also support PEM encoded */
     /* i cannot get this to work from uint32_t pointer so just do byte by byte */
     uint8_t *sptr = aeaShortcutArchive + 0xB;
