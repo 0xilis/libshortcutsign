@@ -32,7 +32,7 @@ void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, siz
     params[1] = OSSL_PARAM_construct_end();
 
     /* Initialize HMAC with SHA-256 */
-    if (!EVP_MAC_init(ctx, hkdf_key, sizeof(hkdf_key), params)) {
+    if (!EVP_MAC_init(ctx, hkdf_key, 32, params)) {
         fprintf(stderr, "Failed to initialize EVP MAC\n");
         EVP_MAC_CTX_free(ctx);
         EVP_MAC_free(mac);
