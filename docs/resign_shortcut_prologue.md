@@ -1,7 +1,9 @@
 # resign_shortcut_prologue
 Resign the AEA prologue from a signed shortcut.
 
-`int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen);`
+```c
+int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen);
+```
 
 ## Parameters
 

@@ -1,7 +1,9 @@
 # extract_signed_shortcut
 Extracts the unsigned shortcut from the signed shortcut.
 
-`int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath);`
+```c
+int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath);
+```
 
 ## Parameters
 

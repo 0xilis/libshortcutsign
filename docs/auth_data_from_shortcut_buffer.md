@@ -1,7 +1,9 @@
 # auth_data_from_shortcut_buffer
 Retrieves the auth data from a signed shortcut.
 
-`uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, size_t bufferSize, size_t *authDataSize);`
+```c
+uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, size_t bufferSize, size_t *authDataSize);
+```
 
 ## Parameters
 

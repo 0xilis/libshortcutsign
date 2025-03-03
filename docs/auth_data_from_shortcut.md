@@ -1,7 +1,9 @@
 # auth_data_from_shortcut
 Retrieves the auth data from a signed shortcut.
 
-`uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize);`
+```c
+uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize);
+```
 
 ## Parameters
 
