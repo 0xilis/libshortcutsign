@@ -19,14 +19,12 @@ output: $(buildDir)
 
 	
 	@if [ OS = "Darwin" ]; then\
-		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os;\
+		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os -Wall -Wpedantic -Wextra;\
 	fi
 
-	@ # declaring -Wdeprecated-declarations is temporary only so people using the library
-	@ # will not be bombarded with compilation warnings...
-	@$(CC) -c extract.c -o build/obj/extract.o -Os -std=c89
-	@$(CC) -c sign.c -o build/obj/sign.o -Os -std=c89 -Wno-deprecated-declarations
-	@$(CC) -c verify.c -o build/obj/verify.o -Os -std=c89 -Wno-deprecated-declarations
+	@$(CC) -c extract.c -o build/obj/extract.o -Os -Wall -Wpedantic -Wextra
+	@$(CC) -c sign.c -o build/obj/sign.o -Os -Wall -Wpedantic -Wextra
+	@$(CC) -c verify.c -o build/obj/verify.o -Os -Wall -Wpedantic -Wextra
 	@cd ..
 	@ar rcs build/usr/lib/libshortcutsign.a build/obj/*.o
 
