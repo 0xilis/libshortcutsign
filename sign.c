@@ -223,7 +223,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     /* set the public key in the EC_KEY object */
     params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PUB_KEY, pub_key_bn, 0);
     /* set the private key in the EC_KEY object */
-    params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn, 0);
+    params[2] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn, 0);
     params[3] = OSSL_PARAM_construct_end();
 
     EVP_PKEY *pkey = EVP_PKEY_new();
