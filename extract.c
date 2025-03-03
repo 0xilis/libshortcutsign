@@ -158,7 +158,7 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
         return -1;
     }
     unsigned int i = 0;
-    for (i = 0; i < archive->itemCount; i++) {
+    for (i = 0; i < (unsigned int)archive->itemCount; i++) {
         /*
          * We loop through all items to find the PAT field key.
          * The PAT field key will be what path the item is in the

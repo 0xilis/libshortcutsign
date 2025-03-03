@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 #include <openssl/ec.h>
 #include <openssl/pem.h>
+#include <openssl/param_build.h>
 #include <plist/plist.h>
 #include <openssl/err.h>
 #include <inttypes.h>
@@ -121,13 +122,49 @@ int verify_certificate_chain(STACK_OF(X509) *chain) {
     return ret; /* returns 1 if valid, 0 if invalid */
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+EVP_PKEY* rsa_to_evp_pkey(RSA* pkey) {
+    EVP_PKEY* evpkey = EVP_PKEY_new();
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, "rsa", NULL);
+    OSSL_PARAM_BLD *bld = OSSL_PARAM_BLD_new();
+    OSSL_PARAM *params;
+
+    if( bld == NULL
+          || !OSSL_PARAM_BLD_push_BN(bld, "n", RSA_get0_n(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "e", RSA_get0_e(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "d", RSA_get0_d(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-factor1", RSA_get0_p(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-factor2", RSA_get0_q(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-exponent1", RSA_get0_dmp1(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-exponent2", RSA_get0_dmq1(pkey) )
+          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-coefficient1", RSA_get0_iqmp(pkey) )
+          || (params = OSSL_PARAM_BLD_to_param(bld)) == NULL)
+    {
+       OSSL_PARAM_BLD_free(bld);
+       return NULL;
+    }
+    OSSL_PARAM_BLD_free(bld);
+
+    if( EVP_PKEY_fromdata_init(ctx) != 1 ||
+       EVP_PKEY_fromdata(ctx, &evpkey, EVP_PKEY_KEYPAIR, params) != 1)
+    {
+       OSSL_PARAM_free(params);
+       return NULL;
+    }
+    OSSL_PARAM_free(params);
+
+    EVP_PKEY_CTX_free(ctx);
+    return evpkey;
+}
+#pragma clang diagnostic pop
+
 int verify_rsa_signature_evp(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, RSA *public_key) {
     /* Log the signed data and its hash for debugging */
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(signed_data, signed_data_len, hash);
 
-    EVP_PKEY *pkey = EVP_PKEY_new();
-    EVP_PKEY_assign_RSA(pkey, public_key);
+    EVP_PKEY *pkey = rsa_to_evp_pkey(public_key);
 
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
     EVP_MD_CTX_init(ctx);
