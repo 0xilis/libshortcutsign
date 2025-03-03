@@ -204,7 +204,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     memset(aeaShortcutArchive + auth_data_size + 0xc, 0, 128);  /* Zero out the signature field */
 
     /* parse the X9.63 ECDSA-P256 key */
-    const unsigned char *priv_key_ptr = (unsigned char *)privateKey;
+    unsigned char *priv_key_ptr = (unsigned char *)privateKey;
     BIGNUM *pub_key_bn = BN_bin2bn(priv_key_ptr + 1, 64, NULL);
     if (!pub_key_bn) {
         fprintf(stderr, "shortcut-sign: failed to parse raw public key\n");
@@ -217,30 +217,29 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
         return -1;
     }
 
-    EVP_PKEY *pkey = EVP_EC_gen(SN_X9_62_prime256v1);
+    OSSL_PARAM params[4];
     /* create an EC_PKEY object for the secp256r1 curve */
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, SN_X9_62_prime256v1, 0);
+    /* set the public key in the EC_KEY object */
+    params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PUB_KEY, pub_key_bn, 0);
+    /* set the private key in the EC_KEY object */
+    params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn, 0);
+    params[3] = OSSL_PARAM_construct_end();
+
+    EVP_PKEY *pkey = EVP_PKEY_new();
+    
     if (!pkey) {
         fprintf(stderr, "shortcut-sign: failed to create EVP_PKEY object\n");
         BN_free(pub_key_bn);
         BN_free(priv_key_bn);
         return -1;
     }
-
-    /* set the public key in the EC_KEY object */
-    if (!EVP_PKEY_set_bn_param(pkey, OSSL_PKEY_PARAM_PUB_KEY, pub_key_bn)) {
-        fprintf(stderr, "shortcut-sign: failed to set public key in EC_KEY\n");
-        EVP_PKEY_free(pkey);
+    
+    if (!EVP_PKEY_set_params(pkey, params)) {
+        fprintf(stderr, "shortcut-sign: failed to set parameters on EVP_PKEY object\n");
         BN_free(pub_key_bn);
         BN_free(priv_key_bn);
-        return -1;
-    }
-
-    /* set the private key in the EC_KEY object */
-    if (!EVP_PKEY_set_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn)) {
-        fprintf(stderr, "shortcut-sign: failed to set private key in EC_KEY\n");
         EVP_PKEY_free(pkey);
-        BN_free(pub_key_bn);
-        BN_free(priv_key_bn);
         return -1;
     }
 
