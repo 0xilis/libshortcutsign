@@ -210,12 +210,28 @@ uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize
      * segments, we just take the segment size and hope
      * it has one segment. This is BAD! Support multisegment in future.
      */
-    register const char *sptr = aeaShortcutArchive + 0xB;
+    register const char *sptr = (char *)encodedAppleArchive + 0xB;
     size_t authDataSize = *sptr << 24;
     authDataSize += *(sptr - 1) << 16;
     authDataSize += *(sptr - 2) << 8;
     authDataSize += *(sptr - 3);
-    sptr = aeaShortcutArchive + authDataSize + 0xfc;
+
+    /* Get the compression algorithm for the AEA (Shortcuts is always LZFSE) */
+    char compressionAlgorithm = *(encodedAppleArchive + authDataSize + 0x104);
+    if (compressionAlgorithm == '-' || compressionAlgorithm == 0) {
+        /* RAW uncompressed AEA, this is rare! */
+        size_t _aaSize = encodedAEASize - offset;
+        uint8_t *buffer = malloc(_aaSize);
+        memcpy(buffer, aaLZFSEPtr, _aaSize);
+        if (aaSize) {
+            *aaSize = _aaSize;
+        }
+        return buffer;
+    }
+    if (compressionAlgorithm != 'e') {
+        fprintf(stderr,"libshortcutsign: aea does not seem to be lzfse compressed or raw, will likely fail\n");
+    }
+    sptr = (char *)encodedAppleArchive + authDataSize + 0xfc;
     size_t segmentSize = *sptr << 24;
     segmentSize += *(sptr - 1) << 16;
     segmentSize += *(sptr - 2) << 8;
