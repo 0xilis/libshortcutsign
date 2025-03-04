@@ -186,6 +186,7 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
             }
             fwrite(item->encodedBlobData, item->encodedBlobDataSize, 1, fp);
             fclose(fp);
+            neo_aa_archive_plain_destroy(archive);
             return 0;
         }
         free(patStr);
