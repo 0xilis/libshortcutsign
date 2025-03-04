@@ -10,6 +10,7 @@
 #include <openssl/err.h>
 #include <openssl/ec.h>
 #include <openssl/kdf.h>
+#include <openssl/param_build.h>
 #include "build/lzfse/include/lzfse.h"
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
@@ -217,32 +218,39 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
         return -1;
     }
 
-    OSSL_PARAM params[4];
-    /* create an EC_PKEY object for the secp256r1 curve */
-    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, SN_X9_62_prime256v1, 0);
-    /* set the public key in the EC_KEY object */
-    params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PUB_KEY, pub_key_bn, 0);
-    /* set the private key in the EC_KEY object */
-    params[2] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn, 0);
-    params[3] = OSSL_PARAM_construct_end();
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+	if (ctx == NULL) {
+		fprintf(stderr, "shortcut-sign: failed to create EVP_PKEY_CTX object\n");
+        BN_free(pub_key_bn);
+        BN_free(priv_key_bn);
+        return -1;
+	}
 
-    EVP_PKEY *pkey = EVP_PKEY_new();
-    
-    if (!pkey) {
+    OSSL_PARAM_BLD *paramb = OSSL_PARAM_BLD_new();
+    /* create an EC_PKEY object for the secp256r1 curve */
+    OSSL_PARAM_BLD_push_utf8_string(paramb, OSSL_PKEY_PARAM_GROUP_NAME, SN_X9_62_prime256v1, 0);
+    /* set the private key in the EC_KEY object */
+    OSSL_PARAM_BLD_push_BN(paramb, OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn);
+    /* set the public key in the EC_KEY object */
+    OSSL_PARAM_BLD_push_BN(paramb, OSSL_PKEY_PARAM_PUB_KEY, pub_key_bn);
+    OSSL_PARAM *params = OSSL_PARAM_BLD_to_param(paramb);
+
+    if (!EVP_PKEY_fromdata_init(ctx)) {
+        fprintf(stderr, "shortcut-sign: failed to initialize context\n");
+        BN_free(pub_key_bn);
+        BN_free(priv_key_bn);
+        return -1;
+    }
+
+    EVP_PKEY *pkey = NULL;
+
+    if (!EVP_PKEY_fromdata(ctx, &pkey, OSSL_KEYMGMT_SELECT_ALL_PARAMETERS|OSSL_KEYMGMT_SELECT_KEYPAIR, params)) {
         fprintf(stderr, "shortcut-sign: failed to create EVP_PKEY object\n");
         BN_free(pub_key_bn);
         BN_free(priv_key_bn);
         return -1;
     }
     
-    if (!EVP_PKEY_set_params(pkey, params)) {
-        fprintf(stderr, "shortcut-sign: failed to set parameters on EVP_PKEY object\n");
-        BN_free(pub_key_bn);
-        BN_free(priv_key_bn);
-        EVP_PKEY_free(pkey);
-        return -1;
-    }
-
     /* sign the sha256 hash */
     EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
     if (!md_ctx) {
