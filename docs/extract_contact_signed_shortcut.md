@@ -1,7 +1,9 @@
 # extract_contact_signed_shortcut
 Extracts the unsigned shortcut from the signed shortcut. Nowadays just a wrapper around the modern better cross-compatible extract_signed_shortcut.
 
-`int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath);`
+```c
+int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath);
+```
 
 # Deprecation Notice
 

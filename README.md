@@ -1,6 +1,6 @@
 # libshortcutsign
 
-Library by 0xilis for contact signed shortcuts.
+Library by 0xilis for signed shortcuts.
 
 # Dependencies
 
@@ -58,4 +58,4 @@ libshortcutsign provides a Makefile for easily building it as a static library. 
 
 Contributions are welcome! Not just to the code, but also better documentation would also be appreciated; shortcuts signing is highly undocumented and to be honest I'm not sure how to say exactly some of the things I know about it...
 
-Minor contributions will also be appriecated.
+Minor contributions will also be appreciated.
