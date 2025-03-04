@@ -1,5 +1,5 @@
-# resign_shortcut_prologue
-Resign the AEA prologue from a signed shortcut.
+# resign_shortcut_with_new_aa
+Resign the signed shortcut with a new or current Apple Archive.
 
 ```c
 int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, size_t *newSize, void *privateKey);
@@ -34,3 +34,5 @@ On success, the return value will be 0. On failure, it will be a negative error 
 ## Note
 
 A shortcut Apple Archive is the unsigned shortcut wrapped in an aar, with the shortcut being named "Shortcut.wflow".
+
+For resigning with the plist instead, check out [resign_shortcut_with_new_plist](resign_shortcut_with_new_plist.md).

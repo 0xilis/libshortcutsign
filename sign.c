@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <openssl/pem.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
@@ -12,6 +13,10 @@
 #include <openssl/kdf.h>
 #include <openssl/param_build.h>
 #include "build/lzfse/include/lzfse.h"
+#include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
+
+/* Temporarily use private lnaa API until I finish public set_field_string */
+void neo_aa_header_add_field_string(NeoAAHeader header, uint32_t key, size_t stringSize, char *s);
 
 void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
@@ -446,4 +451,65 @@ int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, 
     }
 
     return 0;
+}
+
+int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, size_t aeaShortcutArchiveSize, void *plist, size_t plistSize, size_t *newSize, void *privateKey) {
+    /* Form AAR from plist */
+    NeoAAHeader header = neo_aa_header_create();
+    if (!header) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return -1;
+    }
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'D');
+    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1ed);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
+    /* TODO: ADD CTM & MTM fields once neoaa supports it */
+    NeoAAArchiveItem itemDir = neo_aa_archive_item_create_with_header(header);
+    if (!itemDir) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return -1;
+    }
+    /* Create a new header for the Shortcut.wflow file */
+    header = neo_aa_header_create();
+    if (!header) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return -1;
+    }
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
+    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1a4);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
+    /* TODO: Support 2bit and 8bit sizes */
+    neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(size_t), plistSize);
+    /* TODO: ADD CTM & MTM fields once neoaa supports it */
+    NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
+    if (!itemPlist) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return -1;
+    }
+    /* Add plist blob data */
+    neo_aa_archive_item_add_blob_data(itemPlist, plist, plistSize);
+    
+    NeoAAArchiveItem *items = malloc(sizeof(NeoAAArchiveItem) * 2);
+    if (!items) {
+        fprintf(stderr,"libshortcutsign: out of memory\n");
+        return -1;
+    }
+    items[0] = itemDir;
+    items[1] = itemPlist;
+    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items(items, 2);
+    neo_aa_archive_item_list_destroy(items, 2);
+    if (!archive) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return -1;
+    }
+    size_t aarSize = 0;
+    uint8_t *encodedData = neo_aa_archive_plain_get_encoded_data(archive, &aarSize);
+    neo_aa_archive_plain_destroy(archive);
+    if (!encodedData || !aarSize) {
+        fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
+        return -1;
+    }
+    return resign_shortcut_with_new_aa(aeaShortcutArchive, encodedData, aeaShortcutArchiveSize, newSize, privateKey);
 }

@@ -10,5 +10,6 @@
 
 int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen);
 int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, size_t *newSize, void *privateKey);
+int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, size_t aeaShortcutArchiveSize, void *plist, size_t plistSize, size_t *newSize, void *privateKey);
 
 #endif /* libshortcutsign_sign_h */
