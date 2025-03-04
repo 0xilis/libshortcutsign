@@ -195,6 +195,48 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
     return -1;
 }
 
+uint8_t *unwrap_file_out_of_neo_aa_buffer(uint8_t *inputBuffer, char *pathString, size_t bufferSize, size_t *outBufferSize) {
+    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_encoded_data(bufferSize, inputBuffer);
+    if (!archive) {
+        fprintf(stderr,"Not enough free memory to allocate archive\n");
+        return 0;
+    }
+    unsigned int i = 0;
+    for (i = 0; i < (unsigned int)archive->itemCount; i++) {
+        /*
+         * We loop through all items to find the PAT field key.
+         * The PAT field key will be what path the item is in the
+         * archive. This also includes symlinks.
+         */
+        NeoAAArchiveItem item = archive->items[i];
+        NeoAAHeader header = item->header;
+        int index = neo_aa_header_get_field_key_index(header, NEO_AA_FIELD_C("PAT"));
+        if (index == -1) {
+            continue;
+        }
+        /* If index is not -1, then header has PAT field key */
+        char *patStr = neo_aa_header_get_field_key_string(header, index);
+        if (!patStr) {
+            printf("Could not get PAT entry in header\n");
+            continue;
+        }
+        if (strncmp(pathString,patStr,strlen(pathString)) == 0) {
+            free(patStr);
+            /* Unwrap file */
+            uint8_t *buffer = malloc(item->encodedBlobDataSize);
+            memcpy(buffer, item->encodedBlobData, item->encodedBlobDataSize);
+            if (outBufferSize) {
+                *outBufferSize = item->encodedBlobDataSize;
+            }
+            neo_aa_archive_plain_destroy(archive);
+            return buffer;
+        }
+        free(patStr);
+    }
+    printf("Could not find file at the specified path in the project.\n");
+    return 0;
+}
+
 /*
  * extract_aa_from_aea
  *
@@ -350,4 +392,38 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
 */
 int __attribute__((deprecated)) extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath) {
     return extract_signed_shortcut(signedShortcutPath, destPath);
+}
+
+uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *unsignedShortcutSize) {
+    char *aeaShortcutArchive = (char *)signedShortcut;
+
+    /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
+    /* We assume it's located at 0x8-0xB */
+    register const char *sptr = aeaShortcutArchive + 0xB;
+    size_t authDataSize = *sptr << 24;
+    authDataSize += *(sptr - 1) << 16;
+    authDataSize += *(sptr - 2) << 8;
+    authDataSize += *(sptr - 3);
+    if (authDataSize > signedShortcutSize-0x495c) {
+        /*
+         * The encrypted data for for signed shortcuts, both contact signed
+         * and icloud signed, should be at authDataSize+0x495c. If our authDataSize
+         * reaches to or past the encrypted data, then it's too big.
+         */
+        fprintf(stderr,"libshortcutsign: authDataSize reaches past data start\n");
+        return 0;
+    }
+    /* Decompress the LZFSE-compressed data */
+    size_t aaSize;
+    uint8_t *aaRawArchive = extract_aa_from_aea((uint8_t *)aeaShortcutArchive, signedShortcutSize, authDataSize + 0x495c, &aaSize);
+    free(aeaShortcutArchive);
+    if (!aaRawArchive) {
+        return 0;
+    }
+    
+    /* Unwrap Shortcut.wflow from Apple Archive into buffer */
+    
+    uint8_t *unsignedShortcut = unwrap_file_out_of_neo_aa_buffer(aaRawArchive, "Shortcut.wflow", aaSize, unsignedShortcutSize);
+    free(aaRawArchive);
+    return unsignedShortcut;
 }
