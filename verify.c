@@ -122,49 +122,10 @@ int verify_certificate_chain(STACK_OF(X509) *chain) {
     return ret; /* returns 1 if valid, 0 if invalid */
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-EVP_PKEY* rsa_to_evp_pkey(RSA* pkey) {
-    EVP_PKEY* evpkey = EVP_PKEY_new();
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, "rsa", NULL);
-    OSSL_PARAM_BLD *bld = OSSL_PARAM_BLD_new();
-    OSSL_PARAM *params;
-
-    if( bld == NULL
-          || !OSSL_PARAM_BLD_push_BN(bld, "n", RSA_get0_n(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "e", RSA_get0_e(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "d", RSA_get0_d(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-factor1", RSA_get0_p(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-factor2", RSA_get0_q(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-exponent1", RSA_get0_dmp1(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-exponent2", RSA_get0_dmq1(pkey) )
-          || !OSSL_PARAM_BLD_push_BN(bld, "rsa-coefficient1", RSA_get0_iqmp(pkey) )
-          || (params = OSSL_PARAM_BLD_to_param(bld)) == NULL)
-    {
-       OSSL_PARAM_BLD_free(bld);
-       return NULL;
-    }
-    OSSL_PARAM_BLD_free(bld);
-
-    if( EVP_PKEY_fromdata_init(ctx) != 1 ||
-       EVP_PKEY_fromdata(ctx, &evpkey, EVP_PKEY_KEYPAIR, params) != 1)
-    {
-       OSSL_PARAM_free(params);
-       return NULL;
-    }
-    OSSL_PARAM_free(params);
-
-    EVP_PKEY_CTX_free(ctx);
-    return evpkey;
-}
-#pragma clang diagnostic pop
-
-int verify_rsa_signature_evp(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, RSA *public_key) {
+int verify_rsa_signature(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, EVP_PKEY *pkey) {
     /* Log the signed data and its hash for debugging */
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(signed_data, signed_data_len, hash);
-
-    EVP_PKEY *pkey = rsa_to_evp_pkey(public_key);
 
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
     EVP_MD_CTX_init(ctx);
@@ -201,8 +162,8 @@ int verify_rsa_signature_evp(const uint8_t *signed_data, size_t signed_data_len,
     return ret; /* returns 1 if valid, 0 if invalid, or -1 on error */
 }
 
-/* Function to extract RSA from a certificate (the public key) */
-RSA *get_public_key_from_cert_rsa(const uint8_t *cert_data, size_t cert_size) {
+/* Function to extract the RSA public key from a certificate */
+EVP_PKEY* get_public_key_from_cert(const uint8_t *cert_data, size_t cert_size) {
     const unsigned char *p = cert_data;
 
     X509 *cert = d2i_X509(NULL, &p, cert_size);
@@ -234,20 +195,13 @@ RSA *get_public_key_from_cert_rsa(const uint8_t *cert_data, size_t cert_size) {
         return NULL;
     }
 
-    RSA *rsa_key = NULL;
-    if (EVP_PKEY_id(evp_pkey) == EVP_PKEY_RSA) {
-        rsa_key = EVP_PKEY_get1_RSA(evp_pkey);
-    }
-
-    EVP_PKEY_free(evp_pkey);
-    X509_free(cert);
-
-    if (!rsa_key) {
+    if (EVP_PKEY_id(evp_pkey) != EVP_PKEY_RSA) {
         fprintf(stderr, "Certificate does not contain an RSA public key\n");
         return NULL;
     }
+    X509_free(cert);
 
-    return rsa_key;
+    return evp_pkey;
 }
 
 
@@ -354,11 +308,11 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     plist_get_data_val(signing_public_key_signature_item, (char **)&signing_public_key_signature, &signing_public_key_signature_len);
 
     /* Extract the root certificate (first in the chain) and get the EC public key */
-    RSA *root_cert_public_key = NULL;
+    EVP_PKEY *root_cert_public_key = NULL;
     const uint8_t *root_cert_data = cert_data_array[0]; /* Assuming the first cert is the root cert */
     size_t root_cert_size = cert_count > 0 ? certSizesList[0] : 0;
 
-    root_cert_public_key = get_public_key_from_cert_rsa(root_cert_data, root_cert_size);
+    root_cert_public_key = get_public_key_from_cert(root_cert_data, root_cert_size);
     if (!root_cert_public_key) {
         fprintf(stderr, "Failed to extract public key from certificate\n");
         plist_free(plist);
@@ -366,10 +320,10 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     }
 
     /* Verify the signature using the root certificate's public key */
-    if (verify_rsa_signature_evp(signing_public_key, signing_public_key_len, signing_public_key_signature, signing_public_key_signature_len, root_cert_public_key) != 1) {
+    if (verify_rsa_signature(signing_public_key, signing_public_key_len, signing_public_key_signature, signing_public_key_signature_len, root_cert_public_key) != 1) {
         fprintf(stderr, "Failed to verify signature\n");
         /* EC_KEY_free(root_cert_public_key); */
-        RSA_free(root_cert_public_key);
+        EVP_PKEY_free(root_cert_public_key);
         plist_free(plist);
         return -1;
     }
