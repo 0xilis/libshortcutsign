@@ -203,9 +203,30 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
  */
 uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize, unsigned long offset, size_t *aaSize) {
     uint8_t *aaLZFSEPtr = encodedAppleArchive + offset;
-    size_t decode_size = 0x100000; /* Assume AA Archive is 1MB or less */
-    uint8_t *buffer = malloc(decode_size);
-    *aaSize = lzfse_decode_buffer(buffer, decode_size, aaLZFSEPtr, encodedAEASize, 0);
+    /*
+     * TODO:
+     *
+     * Since we currently do not support AEAs with multiple
+     * segments, we just take the segment size and hope
+     * it has one segment. This is BAD! Support multisegment in future.
+     */
+    register const char *sptr = aeaShortcutArchive + 0xB;
+    size_t authDataSize = *sptr << 24;
+    authDataSize += *(sptr - 1) << 16;
+    authDataSize += *(sptr - 2) << 8;
+    authDataSize += *(sptr - 3);
+    sptr = aeaShortcutArchive + authDataSize + 0xfc;
+    size_t segmentSize = *sptr << 24;
+    segmentSize += *(sptr - 1) << 16;
+    segmentSize += *(sptr - 2) << 8;
+    segmentSize += *(sptr - 3);
+
+    if (!segmentSize) {
+        fprintf(stderr,"libshortcutsign: aea does not have segmentSize, assuming 1mb...\n");
+        segmentSize = 0x100000; /* Assume AA Archive is 1MB or less */
+    }
+    uint8_t *buffer = malloc(segmentSize);
+    *aaSize = lzfse_decode_buffer(buffer, segmentSize, aaLZFSEPtr, encodedAEASize, 0);
     if (!buffer) {
         fprintf(stderr,"libshortcutsign: failed to decompress LZFSE\n");
         return 0;
@@ -270,22 +291,22 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
     /* We assume it's located at 0x8-0xB */
     register const char *sptr = aeaShortcutArchive + 0xB;
-    size_t buf_size = *sptr << 24;
-    buf_size += *(sptr - 1) << 16;
-    buf_size += *(sptr - 2) << 8;
-    buf_size += *(sptr - 3);
-    if (buf_size > binary_size-0x495c) {
+    size_t authDataSize = *sptr << 24;
+    authDataSize += *(sptr - 1) << 16;
+    authDataSize += *(sptr - 2) << 8;
+    authDataSize += *(sptr - 3);
+    if (authDataSize > binary_size-0x495c) {
         /*
          * The encrypted data for for signed shortcuts, both contact signed
-         * and icloud signed, should be at buf_size+0x495c. If our buf_size
+         * and icloud signed, should be at authDataSize+0x495c. If our authDataSize
          * reaches to or past the encrypted data, then it's too big.
          */
-        fprintf(stderr,"libshortcutsign: buf_size reaches past data start\n");
+        fprintf(stderr,"libshortcutsign: authDataSize reaches past data start\n");
         return -1;
     }
     /* Decompress the LZFSE-compressed data */
     size_t aaSize;
-    uint8_t *aaRawArchive = extract_aa_from_aea((uint8_t *)aeaShortcutArchive, binary_size, buf_size + 0x495c, &aaSize);
+    uint8_t *aaRawArchive = extract_aa_from_aea((uint8_t *)aeaShortcutArchive, binary_size, authDataSize + 0x495c, &aaSize);
     free(aeaShortcutArchive);
     if (!aaRawArchive) {
         return -1;
