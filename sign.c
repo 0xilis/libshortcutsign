@@ -32,7 +32,7 @@ void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, siz
     params[1] = OSSL_PARAM_construct_end();
 
     /* Initialize HMAC with SHA-256 */
-    if (!EVP_MAC_init(ctx, hkdf_key, sizeof(hkdf_key), params)) {
+    if (!EVP_MAC_init(ctx, hkdf_key, 32, params)) {
         fprintf(stderr, "Failed to initialize EVP MAC\n");
         EVP_MAC_CTX_free(ctx);
         EVP_MAC_free(mac);
@@ -189,8 +189,6 @@ int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
 }
 
 int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
-    (void)privateKeyLen; // unused but don't break API
-
     /* TODO: Don't just support X9.63 keys, also support PEM encoded */
     /* i cannot get this to work from uint32_t pointer so just do byte by byte */
     uint8_t *sptr = aeaShortcutArchive + 0xB;
@@ -217,30 +215,44 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
         return -1;
     }
 
-    EVP_PKEY *pkey = EVP_EC_gen(SN_X9_62_prime256v1);
-    /* create an EC_PKEY object for the secp256r1 curve */
-    if (!pkey) {
-        fprintf(stderr, "shortcut-sign: failed to create EVP_PKEY object\n");
-        BN_free(pub_key_bn);
+    /* create an EC_KEY object for the secp256r1 curve */
+    EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!ec_key) {
+        fprintf(stderr, "shortcut-sign: failed to create EC_KEY object\n");
         BN_free(priv_key_bn);
         return -1;
     }
 
     /* set the public key in the EC_KEY object */
-    if (!EVP_PKEY_set_bn_param(pkey, OSSL_PKEY_PARAM_PUB_KEY, pub_key_bn)) {
+    if (!EC_KEY_set_private_key(ec_key, pub_key_bn)) {
         fprintf(stderr, "shortcut-sign: failed to set public key in EC_KEY\n");
-        EVP_PKEY_free(pkey);
-        BN_free(pub_key_bn);
         BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
         return -1;
     }
 
     /* set the private key in the EC_KEY object */
-    if (!EVP_PKEY_set_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn)) {
+    if (!EC_KEY_set_private_key(ec_key, priv_key_bn)) {
         fprintf(stderr, "shortcut-sign: failed to set private key in EC_KEY\n");
-        EVP_PKEY_free(pkey);
-        BN_free(pub_key_bn);
         BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return -1;
+    }
+
+    /* assign the EC_KEY to an EVP_PKEY object */
+    EVP_PKEY *private_key = EVP_PKEY_new();
+    if (!private_key) {
+        fprintf(stderr, "shortcut-sign: failed to create EVP_PKEY object\n");
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return -1;
+    }
+
+    if (!EVP_PKEY_assign_EC_KEY(private_key, ec_key)) {
+        fprintf(stderr, "shortcut-sign: failed to assign EC_KEY to EVP_PKEY\n");
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        EVP_PKEY_free(private_key);
         return -1;
     }
 
@@ -248,39 +260,39 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
     if (!md_ctx) {
         fprintf(stderr, "shortcut-sign: failed to create EVP_MD_CTX_new\n");
-        EVP_PKEY_free(pkey);
+        EVP_PKEY_free(private_key);
         return -1;
     }
 
     if (EVP_SignInit(md_ctx, EVP_sha256()) != 1) {
         fprintf(stderr, "shortcut-sign: EVP_SignInit failed\n");
         EVP_MD_CTX_free(md_ctx);
-        EVP_PKEY_free(pkey);
+        EVP_PKEY_free(private_key);
         return -1;
     }
 
     if (EVP_SignUpdate(md_ctx, aeaShortcutArchive, auth_data_size + 0x13c) != 1) {
         fprintf(stderr, "shortcut-sign: EVP_SignUpdate failed\n");
         EVP_MD_CTX_free(md_ctx);
-        EVP_PKEY_free(pkey);
+        EVP_PKEY_free(private_key);
         return -1;
     }
 
-    unsigned char *signature = malloc(EVP_PKEY_size(pkey));
+    unsigned char *signature = malloc(EVP_PKEY_size(private_key));
     if (!signature) {
         fprintf(stderr, "shortcut-sign: not enough memory\n");
         EVP_MD_CTX_free(md_ctx);
-        EVP_PKEY_free(pkey);
+        EVP_PKEY_free(private_key);
         return -1;
     }
 
     unsigned int sig_len;
-    if (EVP_SignFinal(md_ctx, signature, &sig_len, pkey) != 1) {
+    if (EVP_SignFinal(md_ctx, signature, &sig_len, private_key) != 1) {
         fprintf(stderr, "shortcut-sign: failed to sign the hash\n");
         ERR_print_errors_fp(stderr);
         free(signature);
         EVP_MD_CTX_free(md_ctx);
-        EVP_PKEY_free(pkey);
+        EVP_PKEY_free(private_key);
         return -1;
     }
     EVP_MD_CTX_free(md_ctx);
@@ -289,7 +301,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     if (sig_len > 128) {
         fprintf(stderr, "shortcut-sign: sig_len exceeds 128 bytes\n");
         free(signature);
-        EVP_PKEY_free(pkey);
+        EVP_PKEY_free(private_key);
         return -1;
     }
 
@@ -298,7 +310,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
 
     /* clean up */
     free(signature);
-    EVP_PKEY_free(pkey);
+    EVP_PKEY_free(private_key);
     return 0;
 }
 
