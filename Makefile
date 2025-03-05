@@ -1,6 +1,6 @@
 buildDir = build/obj
 CC = clang
-CFLAGS += -Os -Wall -Wpedantic -Wextra
+CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC
 
 # Paths for lzfse
 LZFSE_DIR = libs/lzfse
