@@ -2,7 +2,7 @@
 Resign the signed shortcut with a new or current Apple Archive.
 
 ```c
-int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, size_t *newSize, void *privateKey);
+int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey);
 ```
 
 ## Parameters
@@ -15,9 +15,9 @@ A buffer containing the signed shortcut.
 
 A buffer containing the uncompressed aar of the shortcut you want to resign. This can be a different shortcut than the one in the 1st argument if you wish.
 
-#### aeaShortcutArchiveSize
+#### archivedDir
 
-The size of the signed shortcut buffer.
+The size of the uncompressed aar in bytes.
 
 #### newSize
 

@@ -353,9 +353,8 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     return 0;
 }
 
-int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t aeaShortcutArchiveSize, size_t *newSize, void *privateKey) {
+int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey) {
     /* TODO: This code is really hard to understand */
-    size_t archivedDirSize = aeaShortcutArchiveSize;
     size_t compressedSize = archivedDirSize * 2;
     uint8_t *buffer = malloc(compressedSize);
     compressedSize = lzfse_encode_buffer(buffer, compressedSize, archivedDir, archivedDirSize, NULL);
@@ -454,7 +453,7 @@ int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, 
     return 0;
 }
 
-int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, size_t aeaShortcutArchiveSize, void *plist, size_t plistSize, size_t *newSize, void *privateKey) {
+int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, size_t plistSize, size_t *newSize, void *privateKey) {
     /* Form AAR from plist */
     NeoAAHeader header = neo_aa_header_create();
     if (!header) {
@@ -527,5 +526,5 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, size_t aeaShortc
         fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
         return -1;
     }
-    return resign_shortcut_with_new_aa(aeaShortcutArchive, encodedData, aeaShortcutArchiveSize, newSize, privateKey);
+    return resign_shortcut_with_new_aa(aeaShortcutArchive, encodedData, aarSize, newSize, privateKey);
 }
