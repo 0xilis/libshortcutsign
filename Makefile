@@ -1,5 +1,6 @@
-buildDir = build
+buildDir = build/obj
 CC = clang
+CFLAGS += -Os -Wall -Wpedantic -Wextra
 
 # Paths for lzfse
 LZFSE_DIR = libs/lzfse
@@ -7,27 +8,43 @@ LZFSE_DIR = libs/lzfse
 BUILD_DIR = ../../build/lzfse
 OBJ_DIR = build/obj
 
+NEOAPPLEARCHIVE_DIR = libs/libNeoAppleArchive
+
 OS := $(shell uname)
+
+VERSION_SCRIPT = EXPORTS
 
 output: $(buildDir)
 	@ # Build liblzfse submodule
 	@echo "building liblzfse..."
 	$(MAKE) -C $(LZFSE_DIR) install INSTALL_PREFIX=$(BUILD_DIR)
+
+	@ # Build libNeoAppleArchive submodule
+	@echo "building libNeoAppleArchive..."
+	$(MAKE) -C $(NEOAPPLEARCHIVE_DIR)
+
 	@ # Build libshortcutsign.a
 	@echo "building libshortcutsign..."
 	@cd build
 
 	
-	@if [ OS = "Darwin" ]; then\
-		@$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o -Os -Wall -Wpedantic -Wextra;\
+	@if [ "$(OS)" = "Darwin" ]; then\
+		$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o $(CFLAGS);\
 	fi
 
-	@$(CC) -c extract.c -o build/obj/extract.o -Os -Wall -Wpedantic -Wextra
-	@$(CC) -c sign.c -o build/obj/sign.o -Os -Wall -Wpedantic -Wextra
-	@$(CC) -c verify.c -o build/obj/verify.o -Os -Wall -Wpedantic -Wextra
-	@$(CC) -c res.c -o build/obj/res.o -Os -Wall -Wpedantic -Wextra
+	@$(CC) -c extract.c -o build/obj/extract.o $(CFLAGS)
+	@$(CC) -c sign.c -o build/obj/sign.o $(CFLAGS)
+	@$(CC) -c verify.c -o build/obj/verify.o $(CFLAGS)
+	@$(CC) -c res.c -o build/obj/res.o $(CFLAGS)
 	@cd ..
 	@ar rcs build/usr/lib/libshortcutsign.a build/obj/*.o
+
+	@# Create shared library and use version script
+	@if [ "$(OS)" = "Darwin" ]; then\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lAppleArchive -framework Security -framework Foundation -lz -lssl -lcrypto -lplist-2.0 -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
+	else\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.so build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0;\
+	fi
 
 $(buildDir):
 	@echo "Creating Build Directory"

@@ -151,7 +151,7 @@ uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, siz
     return authData;
 }
 
-int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char *pathString, size_t bufferSize) {
+__attribute__((visibility ("hidden"))) static int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char *pathString, size_t bufferSize) {
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_encoded_data(bufferSize, inputBuffer);
     if (!archive) {
         fprintf(stderr,"Not enough free memory to allocate archive\n");
@@ -195,7 +195,7 @@ int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char
     return -1;
 }
 
-uint8_t *unwrap_file_out_of_neo_aa_buffer(uint8_t *inputBuffer, char *pathString, size_t bufferSize, size_t *outBufferSize) {
+__attribute__((visibility ("hidden"))) static uint8_t *unwrap_file_out_of_neo_aa_buffer(uint8_t *inputBuffer, char *pathString, size_t bufferSize, size_t *outBufferSize) {
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_encoded_data(bufferSize, inputBuffer);
     if (!archive) {
         fprintf(stderr,"Not enough free memory to allocate archive\n");
@@ -243,7 +243,7 @@ uint8_t *unwrap_file_out_of_neo_aa_buffer(uint8_t *inputBuffer, char *pathString
  * Extracts the AA Archive from a signed shortcut AEA.
  * Only meant for internal use. Don't call this yourself!
  */
-uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize, unsigned long offset, size_t *aaSize) {
+__attribute__((visibility ("hidden"))) static uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize, unsigned long offset, size_t *aaSize) {
     uint8_t *aaLZFSEPtr = encodedAppleArchive + offset;
     /*
      * TODO:

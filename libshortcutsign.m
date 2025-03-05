@@ -29,7 +29,7 @@
  * If verified, this function returns 0.
  * If not verified, this function returns a negative error code.
 */
-int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *authData, const char *unsignedShortcutPath, const char *destPath) {
+int __attribute__((deprecated)) sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *authData, const char *unsignedShortcutPath, const char *destPath) {
  int succeed = -1;
  AEAContext context = AEAContextCreateWithProfile(0);
  if (context) {
@@ -64,38 +64,3 @@ int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *auth
  }
  return succeed;
 }
-
-/*
- * generate_appleid_certs_with_data
- *
- * Generates an array of SecCertificateRef certs from 
- * an NSArray containing NSData for the certs.
- *
- * This can be used for getting a cert chain from the
- * extracted auth data of a shortcut.
- *
- * If the function fails, it returns 0/nil.
-*/
-NSArray *generate_appleid_certs_with_data(NSArray *appleIDCertDataChain) {
- int count = [appleIDCertDataChain count];
- if (count < 1) {
-  fprintf(stderr,"libshortcutsign: no items in passed in cert data chain\n");
-  return 0;
- }
- NSMutableArray *returnArray = [[NSMutableArray alloc]initWithCapacity:count];
- NSData *certData;
- SecCertificateRef cert;
- for (int i = 0; i < count; i++) {
-  certData = appleIDCertDataChain[i];
-  cert = SecCertificateCreateWithData(0, (__bridge CFDataRef)certData);
-  returnArray[i] = (id)cert;
- }
- return [[NSArray alloc]initWithArray:returnArray];
-}
-
-/* We have to define these ourselves */
-SecPolicyRef SecPolicyCreateAppleIDAuthorityPolicy(void);
-extern const CFStringRef kSecPolicyCheckTemporalValidity;
-void SecPolicySetOptionsValue(SecPolicyRef policy, CFStringRef key, CFTypeRef value);
-SecPolicyRef SecPolicyCreateAppleIDValidationRecordSigningPolicy(void);
-OSStatus SecCMSVerifyCopyDataAndAttributes(CFDataRef message, CFDataRef detached_contents, CFTypeRef policy, SecTrustRef *trustref, CFDataRef *attached_contents, CFDictionaryRef *signed_attributes);
