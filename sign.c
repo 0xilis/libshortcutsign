@@ -15,6 +15,7 @@
 #include <openssl/param_build.h>
 #include "build/lzfse/include/lzfse.h"
 #include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
+#include "res.h"
 
 /* Temporarily use private lnaa API until I finish public set_field_string */
 void neo_aa_header_add_field_string(NeoAAHeader header, uint32_t key, size_t stringSize, char *s);
@@ -195,14 +196,14 @@ __attribute__((visibility ("hidden"))) static int hkdf_extract_and_expand_helper
     return 1;
 }
 
-int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size_t privateKeyLen) {
+int resign_shortcut_prologue(uint8_t *signedShortcut, void *privateKey, size_t privateKeyLen) {
 
     /* privateKeyLen is unused but don't break API */
     (void)privateKeyLen;
 
     /* TODO: Don't just support X9.63 keys, also support PEM encoded */
     /* i cannot get this to work from uint32_t pointer so just do byte by byte */
-    uint8_t *sptr = aeaShortcutArchive + 0xB;
+    uint8_t *sptr = signedShortcut + 0xB;
     size_t authDataSize = 0;
     authDataSize |= *(sptr) << 24;
     authDataSize |= *(sptr - 1) << 16;
@@ -210,7 +211,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     authDataSize |= *(sptr - 3);
 
     /* zero out the sig for the hash */
-    memset(aeaShortcutArchive + authDataSize + 0xc, 0, 128);  /* Zero out the signature field */
+    memset(signedShortcut + authDataSize + 0xc, 0, 128);  /* Zero out the signature field */
 
     /* parse the X9.63 ECDSA-P256 key */
     unsigned char *priv_key_ptr = (unsigned char *)privateKey;
@@ -310,7 +311,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
         return -1;
     }
 
-    if (EVP_SignUpdate(md_ctx, aeaShortcutArchive, authDataSize + 0x13c) != 1) {
+    if (EVP_SignUpdate(md_ctx, signedShortcut, authDataSize + 0x13c) != 1) {
         fprintf(stderr, "shortcut-sign: EVP_SignUpdate failed\n");
         EVP_MD_CTX_free(md_ctx);
         EVP_PKEY_free(pkey);
@@ -345,7 +346,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     }
 
     /* overwrite the signature field in the archive with the new signature */
-    memcpy(aeaShortcutArchive + authDataSize + 0xc, signature, sigLen);
+    memcpy(signedShortcut + authDataSize + 0xc, signature, sigLen);
 
     /* clean up */
     free(signature);
@@ -353,7 +354,7 @@ int resign_shortcut_prologue(uint8_t *aeaShortcutArchive, void *privateKey, size
     return 0;
 }
 
-int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey) {
+int resign_shortcut_with_new_aa(uint8_t *signedShortcut, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey) {
     /* TODO: This code is really hard to understand */
     size_t compressedSize = archivedDirSize * 2;
     uint8_t *buffer = malloc(compressedSize);
@@ -364,25 +365,25 @@ int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, 
         return -1;
     }
 
-    /* Extract authDataSize from aeaShortcutArchive */
-    register const uint8_t *sptr = (const uint8_t *)(aeaShortcutArchive + 0xB);
+    /* Extract authDataSize from signedShortcut */
+    register const uint8_t *sptr = (const uint8_t *)(signedShortcut + 0xB);
     size_t authDataSize = *sptr << 24;
     authDataSize += *(sptr - 1) << 16;
     authDataSize += *(sptr - 2) << 8;
     authDataSize += *(sptr - 3);
 
     /* Fix authDataSize + offsets */
-    memcpy(aeaShortcutArchive + authDataSize + 0xec, &archivedDirSize, 4);
-    memcpy(aeaShortcutArchive + authDataSize + 0x13c, &archivedDirSize, 4);
+    memcpy(signedShortcut + authDataSize + 0xec, &archivedDirSize, 4);
+    memcpy(signedShortcut + authDataSize + 0x13c, &archivedDirSize, 4);
 
     /* Set compressed LZFSE data */
-    aeaShortcutArchive = realloc(aeaShortcutArchive, authDataSize + 0x495c + compressedSize);
-    memcpy(aeaShortcutArchive + authDataSize + 0x495c, buffer, compressedSize);
+    signedShortcut = realloc(signedShortcut, authDataSize + 0x495c + compressedSize);
+    memcpy(signedShortcut + authDataSize + 0x495c, buffer, compressedSize);
     free(buffer);
 
     /* Prepare HKDF context */
-    const uint8_t *salt = (uint8_t *)(aeaShortcutArchive + authDataSize + 0xac);
-    const uint8_t *keyDerivationKey = (uint8_t *)(aeaShortcutArchive + authDataSize + 0x8c); // 32-byte key
+    const uint8_t *salt = (uint8_t *)(signedShortcut + authDataSize + 0xac);
+    const uint8_t *keyDerivationKey = (uint8_t *)(signedShortcut + authDataSize + 0x8c); // 32-byte key
     uint8_t context[0x4c] = {0};
     memcpy(context, "AEA_AMK", 7);
     memcpy(context + 11, privateKey, 0x41); // Copy public part of private key
@@ -397,9 +398,9 @@ int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, 
     /*
      * before doing hmac, update the size in prolouge
      */
-    memcpy(aeaShortcutArchive + authDataSize + 0x13c + 4, &compressedSize, 4);
-    size_t resigned_shortcut_size = authDataSize + 0x495c + compressedSize;
-    memcpy(aeaShortcutArchive + authDataSize + 0xec + 8, &resigned_shortcut_size, 4);
+    memcpy(signedShortcut + authDataSize + 0x13c + 4, &compressedSize, 4);
+    size_t resignedShortcutSize = authDataSize + 0x495c + compressedSize;
+    memcpy(signedShortcut + authDataSize + 0xec + 8, &resignedShortcutSize, 4);
 
     /* Derive AEA_CK/AEA_SK keys using HKDF */
     void *aea_ck_ctx = malloc(10);
@@ -414,34 +415,34 @@ int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, 
     free(aea_sk_ctx);
 
     /* HMAC derivation for AEA_CK, AEA_SK */
-    uint8_t *hmac = hmac_derive(aea_sk, aeaShortcutArchive + authDataSize + 0x495c, compressedSize, 0, 0);
+    uint8_t *hmac = hmac_derive(aea_sk, signedShortcut + authDataSize + 0x495c, compressedSize, 0, 0);
 
     /* Replace old hmac in binary data */
-    memcpy(aeaShortcutArchive + authDataSize + 0x295c, hmac, 32);
+    memcpy(signedShortcut + authDataSize + 0x295c, hmac, 32);
     free(hmac);
     free(aea_sk);
 
     /* Re-hmac for AEA_CHEK */
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
     /* TODO: This discloses memory into the resigned shortcut, but it still works?? */
-    hmac = hmac_derive(aea_chek, aeaShortcutArchive + authDataSize + 0x13c, 0x2800, aeaShortcutArchive + authDataSize + 0x293c, 0x2020);
-    memcpy(aeaShortcutArchive + authDataSize + 0x11c, hmac, 32);
+    hmac = hmac_derive(aea_chek, signedShortcut + authDataSize + 0x13c, 0x2800, signedShortcut + authDataSize + 0x293c, 0x2020);
+    memcpy(signedShortcut + authDataSize + 0x11c, hmac, 32);
     free(hmac);
 
     /* Re-hmac for AEA_RHEK */
     uint8_t *aea_rhek = do_hkdf("AEA_RHEK", 8, derivedKey);
     uint8_t *chekPlusAuthData = malloc(authDataSize + 32);
-    memcpy(chekPlusAuthData, aeaShortcutArchive + authDataSize + 0x11c, 32);
-    memcpy(chekPlusAuthData + 32, aeaShortcutArchive + 0xc, authDataSize);
-    hmac = hmac_derive(aea_rhek, aeaShortcutArchive + authDataSize + 0xec, 0x30, chekPlusAuthData, authDataSize + 0x20);
-    memcpy(aeaShortcutArchive + authDataSize + 0xcc, hmac, 32);
+    memcpy(chekPlusAuthData, signedShortcut + authDataSize + 0x11c, 32);
+    memcpy(chekPlusAuthData + 32, signedShortcut + 0xc, authDataSize);
+    hmac = hmac_derive(aea_rhek, signedShortcut + authDataSize + 0xec, 0x30, chekPlusAuthData, authDataSize + 0x20);
+    memcpy(signedShortcut + authDataSize + 0xcc, hmac, 32);
     free(chekPlusAuthData);
     free(hmac);
     free(aea_rhek);
 
     /* Resign shortcut prologue */
-    if (resign_shortcut_prologue(aeaShortcutArchive, privateKey, 97)) {
-        free(aeaShortcutArchive);
+    if (resign_shortcut_prologue(signedShortcut, privateKey, 97)) {
+        free(signedShortcut);
         fprintf(stderr,"libshortcutsign: failed to resign prologue\n");
         return -1;
     }
@@ -453,7 +454,7 @@ int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, 
     return 0;
 }
 
-int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, size_t plistSize, size_t *newSize, void *privateKey) {
+int resign_shortcut_with_new_plist(uint8_t *signedShortcut, void *plist, size_t plistSize, size_t *newSize, void *privateKey) {
     /* Form AAR from plist */
     NeoAAHeader header = neo_aa_header_create();
     if (!header) {
@@ -471,12 +472,14 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, siz
     NeoAAArchiveItem itemDir = neo_aa_archive_item_create_with_header(header);
     if (!itemDir) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_header_destroy(header);
         return -1;
     }
     /* Create a new header for the Shortcut.wflow file */
     header = neo_aa_header_create();
     if (!header) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_archive_item_destroy(itemDir);
         return -1;
     }
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
@@ -501,6 +504,8 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, siz
     NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
     if (!itemPlist) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_header_destroy(header);
+        neo_aa_archive_item_destroy(itemDir);
         return -1;
     }
     /* Add plist blob data */
@@ -509,6 +514,8 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, siz
     NeoAAArchiveItem *items = malloc(sizeof(NeoAAArchiveItem) * 2);
     if (!items) {
         fprintf(stderr,"libshortcutsign: out of memory\n");
+        neo_aa_archive_item_destroy(itemPlist);
+        neo_aa_archive_item_destroy(itemDir);
         return -1;
     }
     items[0] = itemDir;
@@ -526,5 +533,123 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, siz
         fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
         return -1;
     }
-    return resign_shortcut_with_new_aa(aeaShortcutArchive, encodedData, aarSize, newSize, privateKey);
+    return resign_shortcut_with_new_aa(signedShortcut, encodedData, aarSize, newSize, privateKey);
+}
+
+uint8_t *sign_shortcut_aar_with_private_key_and_auth_data(void *aar, size_t aarSize, void *privateKey, uint8_t *authData, size_t authDataSize, size_t *outSize) {
+    /*
+     * TODO:
+     * neo_aea_sign_* is not done for libNeoAppleArchive
+     * So, as a placebo until I finish and can implement it,
+     * Allocate signed shortcut, piggyback off of one in resource
+     * In the future, signedShortcutSize can be found by:
+     * 0x495c + authDataSize + compressedSize;
+     */
+    int64_t _signedShortcutSize = 22485 + ((int64_t)authDataSize - (int64_t)0x89c);
+    if (_signedShortcutSize < 0) {
+        fprintf(stderr,"libshortcutsign: _signeedShortcutSize underflow\n");
+        return 0;
+    }
+    size_t signedShortcutSize = (size_t)_signedShortcutSize;
+    uint8_t *signedShortcut = malloc(signedShortcutSize);
+    /* Copy the root header from embedded aea */
+    memcpy(signedShortcut, embeddedSignedData, 8);
+    /* Copy the authDataSize to header */
+    uint32_t _authDataSize = (uint32_t)authDataSize;
+    *(signedShortcut + 0x9) = (uint8_t)(_authDataSize & 0x000000FF);
+    *(signedShortcut + 0x10) = (uint8_t)((_authDataSize & 0x0000FF00) >> 8);
+    *(signedShortcut + 0x11) = (uint8_t)((_authDataSize & 0x00FF0000) >> 16);
+    *(signedShortcut + 0x12) = (uint8_t)((_authDataSize & 0xFF000000) >> 24);
+    /* Copy auth data */
+    memcpy(signedShortcut + 12, authData, authDataSize);
+    /* Copy the rest of the shortcut */
+    memcpy(signedShortcut + 12 + authDataSize, embeddedSignedData + 0x8a8, 22485 - 0x8a8);
+    if (resign_shortcut_with_new_aa(signedShortcut, aar, aarSize, outSize, privateKey)) {
+        free(signedShortcut);
+        fprintf(stderr,"libshortcutsign: could not sign aar\n");
+        return 0;
+    }
+    return signedShortcut;
+}
+
+uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistSize, void *privateKey, uint8_t *authData, size_t authDataSize, size_t *outSize) {
+    /* Form AAR from plist */
+    NeoAAHeader header = neo_aa_header_create();
+    if (!header) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return 0;
+    }
+    time_t currentDate = time(NULL);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'D');
+    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1ed);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
+    /* use currentTime for creation and modification time */
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("MTM"), 12, currentDate);
+    NeoAAArchiveItem itemDir = neo_aa_archive_item_create_with_header(header);
+    if (!itemDir) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_header_destroy(header);
+        return 0;
+    }
+    /* Create a new header for the Shortcut.wflow file */
+    header = neo_aa_header_create();
+    if (!header) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_archive_item_destroy(itemDir);
+        return 0;
+    }
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
+    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1a4);
+    neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("MTM"), 12, currentDate);
+
+    /* If 16bit, do short, if 32bit do uint32_t, if more do 64bit */
+    if (plistSize <= UINT16_MAX) {
+        plistSize = (uint16_t)plistSize;
+        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint16_t), plistSize);
+    } else if (plistSize <= UINT32_MAX) {
+        plistSize = (uint32_t)plistSize;
+        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint32_t), plistSize);
+    } else {
+        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(size_t), plistSize);
+    }
+
+    /* TODO: ADD CTM & MTM fields once neoaa supports it */
+    NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
+    if (!itemPlist) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_header_destroy(header);
+        neo_aa_archive_item_destroy(itemDir);
+        return 0;
+    }
+    /* Add plist blob data */
+    neo_aa_archive_item_add_blob_data(itemPlist, plist, plistSize);
+    
+    NeoAAArchiveItem *items = malloc(sizeof(NeoAAArchiveItem) * 2);
+    if (!items) {
+        fprintf(stderr,"libshortcutsign: out of memory\n");
+        neo_aa_archive_item_destroy(itemPlist);
+        neo_aa_archive_item_destroy(itemDir);
+        return 0;
+    }
+    items[0] = itemDir;
+    items[1] = itemPlist;
+    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items(items, 2);
+    neo_aa_archive_item_list_destroy(items, 2);
+    if (!archive) {
+        fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        return 0;
+    }
+    size_t aarSize = 0;
+    uint8_t *aar = neo_aa_archive_plain_get_encoded_data(archive, &aarSize);
+    neo_aa_archive_plain_destroy(archive);
+    if (!aar || !aarSize) {
+        fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
+        return 0;
+    }
+    return sign_shortcut_aar_with_private_key_and_auth_data(aar, aarSize, privateKey, authData, authDataSize, outSize);
 }

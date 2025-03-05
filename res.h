@@ -10,5 +10,6 @@
 #include <inttypes.h>
 
 extern const uint8_t *AppleRootCA;
+extern const uint8_t *embeddedSignedData;
 
 #endif /* libshortcutsign_res_h */

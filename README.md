@@ -1,12 +1,12 @@
 # libshortcutsign
 
-Library by 0xilis for signed shortcuts.
+Library by Snoolie K for signed shortcuts.
 
 # Dependencies
 
 libshortcutsign requires these dependencies:
 
-- libplist (soon)
+- libplist-2.0
 - OpenSSL
 
 Statically provided as submodules:
@@ -14,33 +14,14 @@ Statically provided as submodules:
 - libNeoAppleArchive
 - liblzfse
 
-libshortcutsign also currently requires [the Apple Root CA](https://www.apple.com/appleca/AppleIncRootCertificate.cer) to be downloaded and named "AppleRootCA.cer" for verification functions.
-
 # Compatibility
 
-### App Store Guideline Friendly!
-While libshortcutsign is based off of some WorkflowKit methods, **libshortcutsign never links/uses WorkflowKit directly.** Plus, (on macOS, at least) it does not need any entitlements to function.
+libshortcutsign is cross platform and works on Linux and macOS. iOS and FreeBSD are also supported but be aware the Makefile does not build for these platforms. A Windows version is planned, although be aware this may not be for a while. Android is not being considered at this time.
 
-The great thing about this is that it means libshortcutsign can be used in an App Store application, since it never uses private frameworks.
-
-### Cross-platform! (Mostly)
-Be aware that direct signing using the sign_shortcut_with_private_key_and_auth_data is currently restricted to iOS 15.0+ / macOS 12.0+. This is as libshortcutsign uses Security.framework as well as libAppleArchive. It is possible to use `resign_shortcut_with_new_aa` and replace the shortcut actions in the signed shortcut with another shortcut however, which I demo in my [shortcut-sign](https://github.com/0xilis/shortcut-sign) CLI.
-
-**HOWEVER, all other functions are cross platform.** Check out the list.
-
-| Function     | Universal | Notes |
-|--------------|:---------:|-----------:|
-| sign_shortcut_with_private_key_and_auth_data | NO | libAppleArchive & Security.framework needed |
-| auth_data_from_shortcut | YES | No issues! |
-| extract_signed_shortcut | YES | No issues! |
-| verify_contact_signed_auth_data | YES | Currently only supports contact-signed shortcuts |
-| verify_contact_signed_shortcut | YES | Currently only supports contact-signed shortcuts |
-| resign_shortcut_with_new_aa | YES | No issues! |
-
-(Special note about verify_ functions: CMS AppleIDValidationRecord checking is currently not implemented, meaning it is possible for someone to change the phone number hash / email hash associated with a contact signed shortcut. This will be implemented in the future)
+Do be aware however that verify_ functions are not yet complete: CMS AppleIDValidationRecord checking is currently not implemented, meaning it is possible for someone to change the phone number hash / email hash associated with a contact signed shortcut. libNeoAppleArchive prologue checking is also not implemented in yet. These will be implemented in the future.
 
 # Signing
-libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file. **Notice for usage: the passed in unsignedShortcutPath must point to a directory that contains the unsigned shortcut file, not to the directory itself. The directory must only contain the unsigned shortcut as "Shortcut.wflow" and nothing else. If you name it something different, shortcuts fails to decrypt it.**
+libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file.
 
 libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/seemoo-lab/airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) ) contact sign a shortcut.
 
@@ -52,10 +33,12 @@ I have made an official CLI tool using libshortcutsign that works on Linux and m
 
 # Compiling
 
-libshortcutsign provides a Makefile for easily building it as a static library. Just run `make` and it will build to `build/usr/lib/libshortcutsign.a`.
+libshortcutsign provides a Makefile for easily building it as a static library and shared library. Just run `make` and it will build `build/usr/lib/libshortcutsign.a`, as well as `build/usr/lib/libshortcutsign.dylib` on macOS and `build/usr/lib/libshortcutsign.so` on Linux.
 
 # Contributing
 
 Contributions are welcome! Not just to the code, but also better documentation would also be appreciated; shortcuts signing is highly undocumented and to be honest I'm not sure how to say exactly some of the things I know about it...
+
+Special thanks to plx for contributions relating to OpenSSL 3.
 
 Minor contributions will also be appreciated.

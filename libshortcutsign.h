@@ -18,6 +18,4 @@
 #include "verify.h"
 #include "sign.h"
 
-int sign_shortcut_with_private_key_and_auth_data(SecKeyRef privKey, NSData *authData, const char *unsignedShortcutPath, const char *destPath) __attribute__((deprecated)); /* This function will soon be replaced with a cross-compat alternative */
-
 #endif /* libshortcutsign_h */

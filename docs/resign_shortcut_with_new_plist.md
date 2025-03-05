@@ -17,7 +17,7 @@ A buffer containing the plist of the shortcut you want to resign. This can be a 
 
 #### plistSize
 
-The size of the plist buffer.
+The size of the plist buffer in bytes.
 
 #### newSize
 

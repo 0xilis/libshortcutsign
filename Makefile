@@ -27,11 +27,6 @@ output: $(buildDir)
 	@echo "building libshortcutsign..."
 	@cd build
 
-	
-	@if [ "$(OS)" = "Darwin" ]; then\
-		$(CC) -c libshortcutsign.m -o build/obj/libshortcutsign.o $(CFLAGS);\
-	fi
-
 	@$(CC) -c extract.c -o build/obj/extract.o $(CFLAGS)
 	@$(CC) -c sign.c -o build/obj/sign.o $(CFLAGS)
 	@$(CC) -c verify.c -o build/obj/verify.o $(CFLAGS)
@@ -41,7 +36,7 @@ output: $(buildDir)
 
 	@# Create shared library and use version script
 	@if [ "$(OS)" = "Darwin" ]; then\
-		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lAppleArchive -framework Security -framework Foundation -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
 	else\
 		$(CC) -shared -o build/usr/lib/libshortcutsign.so build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS);\
 	fi
