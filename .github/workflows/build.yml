@@ -3,10 +3,10 @@ name: Build Project
 on:
   push:
     branches:
-      - master  # Default branch
+      - main  # Default branch
   pull_request:
     branches:
-      - master
+      - main
 
 jobs:
   build:
