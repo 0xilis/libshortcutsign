@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 #include <openssl/pem.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
@@ -460,11 +461,14 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, size_t aeaShortc
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
         return -1;
     }
+    time_t currentDate = time(NULL);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'D');
     neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1ed);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
-    /* TODO: ADD CTM & MTM fields once neoaa supports it */
+    /* use currentTime for creation and modification time */
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("MTM"), 12, currentDate);
     NeoAAArchiveItem itemDir = neo_aa_archive_item_create_with_header(header);
     if (!itemDir) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
@@ -480,8 +484,20 @@ int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, size_t aeaShortc
     neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1a4);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
-    /* TODO: Support 2bit and 8bit sizes */
-    neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(size_t), plistSize);
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
+    neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("MTM"), 12, currentDate);
+
+    /* If 16bit, do short, if 32bit do uint32_t, if more do 64bit */
+    if (plistSize <= UINT16_MAX) {
+        plistSize = (uint16_t)plistSize;
+        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint16_t), plistSize);
+    } else if (plistSize <= UINT32_MAX) {
+        plistSize = (uint32_t)plistSize;
+        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint32_t), plistSize);
+    } else {
+        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(size_t), plistSize);
+    }
+
     /* TODO: ADD CTM & MTM fields once neoaa supports it */
     NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
     if (!itemPlist) {
