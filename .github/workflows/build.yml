@@ -1,0 +1,34 @@
+name: Build Project
+
+on:
+  push:
+    branches:
+      - master  # Default branch
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code from the repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Initialize submodules
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+
+      # Step 3: Set up Clang
+      - name: Set up Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libplist-dev make
+
+      # Step 4: Build the project using Makefile
+      - name: Build the project
+        run: |
+          make
