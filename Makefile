@@ -25,6 +25,7 @@ output: $(buildDir)
 	@$(CC) -c extract.c -o build/obj/extract.o -Os -Wall -Wpedantic -Wextra
 	@$(CC) -c sign.c -o build/obj/sign.o -Os -Wall -Wpedantic -Wextra
 	@$(CC) -c verify.c -o build/obj/verify.o -Os -Wall -Wpedantic -Wextra
+	@$(CC) -c res.c -o build/obj/res.o -Os -Wall -Wpedantic -Wextra
 	@cd ..
 	@ar rcs build/usr/lib/libshortcutsign.a build/obj/*.o
 
@@ -34,3 +35,9 @@ $(buildDir):
 	mkdir build/usr/bin
 	mkdir build/obj
 	mkdir build/lzfse
+
+clean:
+	@echo "Cleaning build files..."
+	@rm -rf build/obj
+
+.PHONY: output clean

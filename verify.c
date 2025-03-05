@@ -12,6 +12,7 @@
 #include <inttypes.h>
 #include "extract.h"
 #include "verify.h"
+#include "res.h"
 
 /*
  * NOTE: THIS CODE IS VERY INCOMPLETE AND BAD.
@@ -44,25 +45,16 @@ STACK_OF(X509) *load_certificate_chain(uint8_t **cert_data_array, size_t cert_co
         sk_X509_push(chain, cert);
     }
 
-    /* This is actually the leaf cert despite the name but too lazy to change var name */
-    FILE *root_cert_file = fopen("AppleRootCA.cer", "rb");
-    if (!root_cert_file) {
-        fprintf(stderr, "Error opening root certificate file\n");
+    X509 *leafCert = d2i_X509(NULL, &AppleRootCA, 1215);
+
+    if (!leafCert) {
+        fprintf(stderr, "Error parsing leaf certificate\n");
         sk_X509_pop_free(chain, X509_free);
         return NULL;
     }
 
-    X509 *root_cert = d2i_X509_fp(root_cert_file, NULL);
-    fclose(root_cert_file);
-
-    if (!root_cert) {
-        fprintf(stderr, "Error parsing root certificate\n");
-        sk_X509_pop_free(chain, X509_free);
-        return NULL;
-    }
-
-    /* Add the root certificate as the last certificate in the chain */
-    sk_X509_push(chain, root_cert);
+    /* Add the leaf certificate as the last certificate in the chain */
+    sk_X509_push(chain, leafCert);
 
     return chain;
 }
