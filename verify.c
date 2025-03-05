@@ -22,7 +22,7 @@
 */
 
 /* Function to load a certificate chain from an array of certificate data */
-STACK_OF(X509) *load_certificate_chain(uint8_t **cert_data_array, size_t cert_count, size_t *certSizesList) {
+__attribute__((visibility ("hidden"))) static STACK_OF(X509) *load_certificate_chain(uint8_t **cert_data_array, size_t cert_count, size_t *certSizesList) {
     STACK_OF(X509) *chain = sk_X509_new_null();
     if (!chain) {
         fprintf(stderr, "Error creating certificate chain\n");
@@ -60,7 +60,7 @@ STACK_OF(X509) *load_certificate_chain(uint8_t **cert_data_array, size_t cert_co
 }
 
 /* Function to verify a certificate chain */
-int verify_certificate_chain(STACK_OF(X509) *chain) {
+__attribute__((visibility ("hidden"))) static int verify_certificate_chain(STACK_OF(X509) *chain) {
     if (!chain || sk_X509_num(chain) == 0) {
         fprintf(stderr, "Empty or invalid certificate chain\n");
         return -1;
@@ -114,7 +114,7 @@ int verify_certificate_chain(STACK_OF(X509) *chain) {
     return ret; /* returns 1 if valid, 0 if invalid */
 }
 
-int verify_rsa_signature(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, EVP_PKEY *pkey) {
+__attribute__((visibility ("hidden"))) static int verify_rsa_signature(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, EVP_PKEY *pkey) {
     /* Log the signed data and its hash for debugging */
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(signed_data, signed_data_len, hash);
@@ -155,7 +155,7 @@ int verify_rsa_signature(const uint8_t *signed_data, size_t signed_data_len, con
 }
 
 /* Function to extract the RSA public key from a certificate */
-EVP_PKEY* get_public_key_from_cert(const uint8_t *cert_data, size_t cert_size) {
+__attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert(const uint8_t *cert_data, size_t cert_size) {
     const unsigned char *p = cert_data;
 
     X509 *cert = d2i_X509(NULL, &p, cert_size);
@@ -198,7 +198,7 @@ EVP_PKEY* get_public_key_from_cert(const uint8_t *cert_data, size_t cert_size) {
 
 
 /* Function to parse the plist file and extract the AppleIDCertificateChain */
-int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***cert_data_array, size_t *cert_count, size_t **certSizesList) {
+__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***cert_data_array, size_t *cert_count, size_t **certSizesList) {
     plist_t plist;
     if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");

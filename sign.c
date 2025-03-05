@@ -19,7 +19,7 @@
 /* Temporarily use private lnaa API until I finish public set_field_string */
 void neo_aa_header_add_field_string(NeoAAHeader header, uint32_t key, size_t stringSize, char *s);
 
-void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
+__attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
     OSSL_PARAM params[4];
 
@@ -84,7 +84,7 @@ void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, siz
     return hmac;
 }
 
-void *do_hkdf(const void *context, size_t contextLen, const void *key) {
+__attribute__((visibility ("hidden"))) static void *do_hkdf(const void *context, size_t contextLen, const void *key) {
     unsigned char *output = malloc(32);
     if (!output) {
         fprintf(stderr, "Failed to allocate memory for HKDF output\n");
@@ -145,7 +145,7 @@ void *do_hkdf(const void *context, size_t contextLen, const void *key) {
 }
 
 /* Helper function to perform HKDF using OpenSSL */
-int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
+__attribute__((visibility ("hidden"))) static int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
                             const uint8_t *key, size_t key_len,
                             const uint8_t *info, size_t info_len,
                             uint8_t *out, size_t out_len) {
