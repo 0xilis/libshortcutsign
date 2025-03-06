@@ -45,7 +45,8 @@ __attribute__((visibility ("hidden"))) static STACK_OF(X509) *load_certificate_c
         sk_X509_push(chain, cert);
     }
 
-    X509 *leafCert = d2i_X509(NULL, &AppleRootCA, 1215);
+    const unsigned char *_AppleRootCA = AppleRootCA;
+    X509 *leafCert = d2i_X509(NULL, &_AppleRootCA, 1215);
 
     if (!leafCert) {
         fprintf(stderr, "Error parsing leaf certificate\n");
