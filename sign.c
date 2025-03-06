@@ -378,6 +378,10 @@ int resign_shortcut_with_new_aa(uint8_t *signedShortcut, void *archivedDir, size
 
     /* Set compressed LZFSE data */
     signedShortcut = realloc(signedShortcut, authDataSize + 0x495c + compressedSize);
+    if (!signedShortcut) {
+        fprintf(stderr,"libshortcutsign: could not realloc signedShortcut\n");
+        return -1;
+    }
     memcpy(signedShortcut + authDataSize + 0x495c, buffer, compressedSize);
     free(buffer);
 
