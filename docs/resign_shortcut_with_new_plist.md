@@ -2,7 +2,7 @@
 Resign the signed shortcut with a new or current shortcut plist.
 
 ```c
-int resign_shortcut_with_new_plist(uint8_t *aeaShortcutArchive, void *plist, size_t plistSize, size_t *newSize, void *privateKey);
+int resign_shortcut_with_new_plist(uint8_t **aeaShortcutArchive, void *plist, size_t plistSize, size_t *newSize, void *privateKey);
 ```
 
 ## Parameters

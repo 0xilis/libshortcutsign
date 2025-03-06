@@ -2,7 +2,7 @@
 Resign the signed shortcut with a new or current Apple Archive.
 
 ```c
-int resign_shortcut_with_new_aa(uint8_t *aeaShortcutArchive, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey);
+int resign_shortcut_with_new_aa(uint8_t **aeaShortcutArchive, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey);
 ```
 
 ## Parameters
