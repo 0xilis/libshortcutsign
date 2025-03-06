@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: '39 0 * * 3'
 
-jobs:
+ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
@@ -61,10 +61,10 @@ jobs:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
 
-    # Create CodeQL database manually
+    # Create CodeQL database manually with --overwrite flag
     - name: Create CodeQL database
       run: |
-        /opt/hostedtoolcache/CodeQL/2.20.5/x64/codeql/codeql database create /home/runner/work/_temp/codeql_databases/cpp --language=cpp --command="make"
+        /opt/hostedtoolcache/CodeQL/2.20.5/x64/codeql/codeql database create /home/runner/work/_temp/codeql_databases/cpp --language=cpp --command="make" --overwrite
 
     # Perform CodeQL analysis (only after the project has been built)
     - name: Perform CodeQL Analysis
