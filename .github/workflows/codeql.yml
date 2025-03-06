@@ -49,12 +49,22 @@ jobs:
         cd ../..
         make  # Build the main project
 
+    # List build artifacts
+    - name: List build artifacts
+      run: |
+        ls -R
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
+
+    # Create CodeQL database manually
+    - name: Create CodeQL database
+      run: |
+        /opt/hostedtoolcache/CodeQL/2.20.5/x64/codeql/codeql database create /home/runner/work/_temp/codeql_databases/cpp --language=cpp --command="make"
 
     # Perform CodeQL analysis (only after the project has been built)
     - name: Perform CodeQL Analysis
