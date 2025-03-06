@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: '39 0 * * 3'
 
- jobs:
+jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
