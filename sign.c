@@ -17,6 +17,9 @@
 #include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
 #include "res.h"
 
+#define EMBEDDED_SIGNED_DATA_SIZE 98099
+#define EMBEDDED_SIGNED_DATA_ADS 0x57f
+
 /* Temporarily use private lnaa API until I finish public set_field_string */
 void neo_aa_header_add_field_string(NeoAAHeader header, uint32_t key, size_t stringSize, char *s);
 
@@ -552,7 +555,7 @@ uint8_t *sign_shortcut_aar_with_private_key_and_auth_data(void *aar, size_t aarS
      * In the future, signedShortcutSize can be found by:
      * 0x495c + authDataSize + compressedSize;
      */
-    int64_t _signedShortcutSize = 22485 + ((int64_t)authDataSize - (int64_t)0x89c);
+    int64_t _signedShortcutSize = EMBEDDED_SIGNED_DATA_SIZE + ((int64_t)authDataSize - (int64_t) EMBEDDED_SIGNED_DATA_ADS);
     if (_signedShortcutSize < 0) {
         fprintf(stderr,"libshortcutsign: _signeedShortcutSize underflow\n");
         return 0;
@@ -567,7 +570,7 @@ uint8_t *sign_shortcut_aar_with_private_key_and_auth_data(void *aar, size_t aarS
     /* Copy auth data */
     memcpy(signedShortcut + 12, authData, authDataSize);
     /* Copy the rest of the shortcut */
-    memcpy(signedShortcut + 12 + authDataSize, &embeddedSignedData + 0x8a8, 22485 - 0x8a8);
+    memcpy(signedShortcut + 12 + authDataSize, &embeddedSignedData + 12 + EMBEDDED_SIGNED_DATA_ADS, EMBEDDED_SIGNED_DATA_SIZE - EMBEDDED_SIGNED_DATA_ADS - 12);
     if (resign_shortcut_with_new_aa(&signedShortcut, aar, aarSize, outSize, privateKey)) {
         free(signedShortcut);
         fprintf(stderr,"libshortcutsign: could not sign aar\n");
