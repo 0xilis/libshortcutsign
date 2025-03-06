@@ -373,10 +373,10 @@ SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
         return SHORTCUT_UNKNOWN_FORMAT;
     }
     /* First see if it's bplist or plist */
-    if (strcmp((char *)buffer, "bplist") == 0) {
+    if (strncmp("bplist", (char *)buffer, 6) == 0) {
         return SHORTCUT_UNSIGNED;
     }
-    if (strcmp((char *)buffer, "<?xml") == 0) {
+    if (strncmp("<?xml", (char *)buffer, 5) == 0) {
         return SHORTCUT_UNSIGNED;
     }
     /* check signed shortcut */
