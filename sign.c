@@ -563,14 +563,14 @@ uint8_t *sign_shortcut_aar_with_private_key_and_auth_data(void *aar, size_t aarS
     size_t signedShortcutSize = (size_t)_signedShortcutSize;
     uint8_t *signedShortcut = malloc(signedShortcutSize);
     /* Copy the root header from embedded aea */
-    memcpy(signedShortcut, &embeddedSignedData, 8);
+    memcpy(signedShortcut, embeddedSignedData, 8);
     /* Copy the authDataSize to header */
     uint32_t _authDataSize = (uint32_t)authDataSize;
     memcpy(signedShortcut + 8, &_authDataSize, 4);
     /* Copy auth data */
     memcpy(signedShortcut + 12, authData, authDataSize);
     /* Copy the rest of the shortcut */
-    memcpy(signedShortcut + 12 + authDataSize, &embeddedSignedData + 12 + EMBEDDED_SIGNED_DATA_ADS, EMBEDDED_SIGNED_DATA_SIZE - EMBEDDED_SIGNED_DATA_ADS - 12);
+    memcpy(signedShortcut + 12 + authDataSize, embeddedSignedData + 12 + EMBEDDED_SIGNED_DATA_ADS, EMBEDDED_SIGNED_DATA_SIZE - EMBEDDED_SIGNED_DATA_ADS - 12);
     if (resign_shortcut_with_new_aa(&signedShortcut, aar, aarSize, outSize, privateKey)) {
         free(signedShortcut);
         fprintf(stderr,"libshortcutsign: could not sign aar\n");
