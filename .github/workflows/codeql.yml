@@ -30,17 +30,23 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Add any setup steps before running the `github/codeql-action/init` action.
-    # This includes steps like installing compilers or runtimes (`actions/setup-node`
-    # or others). This is typically only required for manual builds.
-    # - name: Setup runtime (example)
-    #   uses: actions/setup-example@v1
+    # Initialize git submodules
+    - name: Initialize submodules
+      run: |
+        git submodule update --init --recursive
 
     # Step to build the project if needed
     - name: Set up Clang and build the project
       run: |
         sudo apt-get update
         sudo apt-get install -y clang libplist-dev make
+
+        # Build the submodule if it's required
+        cd libs/lzfse
+        make  # Attempt to build without the 'install' target
+
+        # Go back to the root directory and build the project
+        cd ../..
         make
 
     # Initializes the CodeQL tools for scanning.
