@@ -8,12 +8,6 @@
 #ifndef libshortcutsign_h
 #define libshortcutsign_h
 
-#import <Foundation/Foundation.h>
-#import <AppleArchive/AppleArchive.h>
-#import <AppleArchive/AEAContext.h>
-#import <CoreFoundation/CoreFoundation.h>
-#import <Security/Security.h>
-
 #include "extract.h"
 #include "verify.h"
 #include "sign.h"
