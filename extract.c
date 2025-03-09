@@ -239,61 +239,6 @@ __attribute__((visibility ("hidden"))) static uint8_t *unwrap_file_out_of_neo_aa
 }
 
 /*
- * extract_aa_from_aea
- *
- * Extracts the AA Archive from a signed shortcut AEA.
- * Only meant for internal use. Don't call this yourself!
- */
-__attribute__((visibility ("hidden"))) static uint8_t *extract_aa_from_aea(uint8_t *encodedAppleArchive, size_t encodedAEASize, unsigned long offset, size_t *aaSize) {
-    uint8_t *aaLZFSEPtr = encodedAppleArchive + offset;
-    /*
-     * TODO:
-     *
-     * Since we currently do not support AEAs with multiple
-     * segments, we just take the segment size and hope
-     * it has one segment. This is BAD! Support multisegment in future.
-     */
-    register const char *sptr = (char *)encodedAppleArchive + 0xB;
-    size_t authDataSize = *sptr << 24;
-    authDataSize += *(sptr - 1) << 16;
-    authDataSize += *(sptr - 2) << 8;
-    authDataSize += *(sptr - 3);
-
-    /* Get the compression algorithm for the AEA (Shortcuts is always LZFSE) */
-    char compressionAlgorithm = *(encodedAppleArchive + authDataSize + 0x104);
-    if (compressionAlgorithm == '-' || compressionAlgorithm == 0) {
-        /* RAW uncompressed AEA, this is rare! */
-        size_t _aaSize = encodedAEASize - offset;
-        uint8_t *buffer = malloc(_aaSize);
-        memcpy(buffer, aaLZFSEPtr, _aaSize);
-        if (aaSize) {
-            *aaSize = _aaSize;
-        }
-        return buffer;
-    }
-    if (compressionAlgorithm != 'e') {
-        fprintf(stderr,"libshortcutsign: aea does not seem to be lzfse compressed or raw, will likely fail\n");
-    }
-    sptr = (char *)encodedAppleArchive + authDataSize + 0xfc;
-    size_t segmentSize = *sptr << 24;
-    segmentSize += *(sptr - 1) << 16;
-    segmentSize += *(sptr - 2) << 8;
-    segmentSize += *(sptr - 3);
-
-    if (!segmentSize) {
-        fprintf(stderr,"libshortcutsign: aea does not have segmentSize, assuming 1mb...\n");
-        segmentSize = 0x100000; /* Assume AA Archive is 1MB or less */
-    }
-    uint8_t *buffer = malloc(segmentSize);
-    *aaSize = lzfse_decode_buffer(buffer, segmentSize, aaLZFSEPtr, encodedAEASize, 0);
-    if (!buffer) {
-        fprintf(stderr,"libshortcutsign: failed to decompress LZFSE\n");
-        return 0;
-    }
-    return buffer;
-}
-
-/*
  * extract_signed_shortcut
  *
  * Extracts the unsigned shortcut from the signed shortcut.
@@ -389,10 +334,8 @@ int __attribute__((deprecated)) extract_contact_signed_shortcut(const char *sign
 }
 
 uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *unsignedShortcutSize) {
-    char *aeaShortcutArchive = (char *)signedShortcut;
-
     /* Extract aar from aea using libNeoAppleArchive */
-    NeoAEAArchive aea = neo_aea_archive_with_encoded_data(aeaShortcutArchive, binarySize);
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data(signedShortcut, signedShortcutSize);
     if (!aea) {
         fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
         return 0;
@@ -409,7 +352,7 @@ uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedSh
     
     /* Unwrap Shortcut.wflow from Apple Archive into buffer */
     
-    uint8_t *unsignedShortcut = unwrap_file_out_of_neo_aa_buffer(aaRawArchive, "Shortcut.wflow", aaSize, unsignedShortcutSize);
-    free(aaRawArchive);
+    uint8_t *unsignedShortcut = unwrap_file_out_of_neo_aa_buffer(aar, "Shortcut.wflow", aarSize, unsignedShortcutSize);
+    free(aar);
     return unsignedShortcut;
 }
