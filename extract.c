@@ -293,21 +293,18 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     }
     fclose(fp);
     /* Extract aar from aea using libNeoAppleArchive */
-    NeoAEAArchive aea = neo_aea_archive_with_encoded_data(aeaShortcutArchive, binarySize);
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(aeaShortcutArchive, binarySize);
     if (!aea) {
         fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
         return -1;
     }
-    free(aeaShortcutArchive);
     size_t aarSize;
     uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize);
     if (!aar) {
         fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return -1;
     }
-    /* In the future replace this with a neo_aea_destroy call */
-    free(aea->encodedData);
-    free(aea);
+    neo_aea_archive_destroy(aea);
     
     /* Unwrap Shortcut.wflow from Apple Archive into destPath */
     
@@ -335,7 +332,7 @@ int __attribute__((deprecated)) extract_contact_signed_shortcut(const char *sign
 
 uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *unsignedShortcutSize) {
     /* Extract aar from aea using libNeoAppleArchive */
-    NeoAEAArchive aea = neo_aea_archive_with_encoded_data(signedShortcut, signedShortcutSize);
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(signedShortcut, signedShortcutSize);
     if (!aea) {
         fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
         return 0;
@@ -346,8 +343,6 @@ uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedSh
         fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return 0;
     }
-    /* In the future replace this with a neo_aea_destroy call */
-    free(aea->encodedData);
     free(aea);
     
     /* Unwrap Shortcut.wflow from Apple Archive into buffer */
