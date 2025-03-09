@@ -64,7 +64,7 @@ jobs:
     # Create CodeQL database manually with --overwrite flag
     - name: Create CodeQL database
       run: |
-        /opt/hostedtoolcache/CodeQL/2.20.5/x64/codeql/codeql database create /home/runner/work/_temp/codeql_databases/cpp --language=cpp --command="make" --overwrite
+        ${CODEQL_DIST}/codeql database create /home/runner/work/_temp/codeql_databases/cpp --language=cpp --command="make" --overwrite
 
     # Perform CodeQL analysis (only after the project has been built)
     - name: Perform CodeQL Analysis
