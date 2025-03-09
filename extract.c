@@ -4,6 +4,7 @@
 #include <inttypes.h>
 
 #include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
+#include "libs/libNeoAppleArchive/libNeoAppleArchive/neo_aea_archive.h"
 
 #include "build/lzfse/include/lzfse.h"
 
@@ -306,9 +307,9 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
         return -1;
     }
     fseek(fp, 0, SEEK_END);
-    size_t binary_size = ftell(fp);
+    size_t binarySize = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    char *aeaShortcutArchive = malloc(binary_size * sizeof(char));
+    uint8_t *aeaShortcutArchive = malloc(binarySize);
     /*
      * Explained better in comment below, but
      * a process may write to a file while
@@ -322,12 +323,12 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
      * it doesn't contain any leftover memory
      * left.
      */
-    memset(aeaShortcutArchive, 0, binary_size * sizeof(char));
+    memset(aeaShortcutArchive, 0, binarySize);
     /* copy bytes to binary, byte by byte... */
     int c;
     size_t n = 0;
     while ((c = fgetc(fp)) != EOF) {
-        if (n > binary_size) {
+        if (n > binarySize) {
             /*
              * If, at any point, a file is modified during / before copy,
              * ex it has a really small size, but another process
@@ -346,37 +347,30 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
         aeaShortcutArchive[n++] = (char) c;
     }
     fclose(fp);
-    /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
-    /* We assume it's located at 0x8-0xB */
-    register const char *sptr = aeaShortcutArchive + 0xB;
-    size_t authDataSize = *sptr << 24;
-    authDataSize += *(sptr - 1) << 16;
-    authDataSize += *(sptr - 2) << 8;
-    authDataSize += *(sptr - 3);
-    if (authDataSize > binary_size-0x495c) {
-        /*
-         * The encrypted data for for signed shortcuts, both contact signed
-         * and icloud signed, should be at authDataSize+0x495c. If our authDataSize
-         * reaches to or past the encrypted data, then it's too big.
-         */
-        fprintf(stderr,"libshortcutsign: authDataSize reaches past data start\n");
+    /* Extract aar from aea using libNeoAppleArchive */
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data(aeaShortcutArchive, binarySize);
+    if (!aea) {
+        fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
         return -1;
     }
-    /* Decompress the LZFSE-compressed data */
-    size_t aaSize;
-    uint8_t *aaRawArchive = extract_aa_from_aea((uint8_t *)aeaShortcutArchive, binary_size, authDataSize + 0x495c, &aaSize);
     free(aeaShortcutArchive);
-    if (!aaRawArchive) {
+    size_t aarSize;
+    uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize);
+    if (!aar) {
+        fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return -1;
     }
+    /* In the future replace this with a neo_aea_destroy call */
+    free(aea->encodedData);
+    free(aea);
     
     /* Unwrap Shortcut.wflow from Apple Archive into destPath */
     
-    if (unwrap_file_out_of_neo_aa(aaRawArchive, destPath, "Shortcut.wflow", aaSize)) {
+    if (unwrap_file_out_of_neo_aa(aar, destPath, "Shortcut.wflow", aarSize)) {
         fprintf(stderr, "libshortcutsign: failed to unwrap Shortcut.wflow\n");
         return -1;
     }
-    free(aaRawArchive);
+    free(aar);
     return 0;
 }
 
@@ -397,29 +391,21 @@ int __attribute__((deprecated)) extract_contact_signed_shortcut(const char *sign
 uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *unsignedShortcutSize) {
     char *aeaShortcutArchive = (char *)signedShortcut;
 
-    /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
-    /* We assume it's located at 0x8-0xB */
-    register const char *sptr = aeaShortcutArchive + 0xB;
-    size_t authDataSize = *sptr << 24;
-    authDataSize += *(sptr - 1) << 16;
-    authDataSize += *(sptr - 2) << 8;
-    authDataSize += *(sptr - 3);
-    if (authDataSize > signedShortcutSize-0x495c) {
-        /*
-         * The encrypted data for for signed shortcuts, both contact signed
-         * and icloud signed, should be at authDataSize+0x495c. If our authDataSize
-         * reaches to or past the encrypted data, then it's too big.
-         */
-        fprintf(stderr,"libshortcutsign: authDataSize reaches past data start\n");
+    /* Extract aar from aea using libNeoAppleArchive */
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data(aeaShortcutArchive, binarySize);
+    if (!aea) {
+        fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
         return 0;
     }
-    /* Decompress the LZFSE-compressed data */
-    size_t aaSize;
-    uint8_t *aaRawArchive = extract_aa_from_aea((uint8_t *)aeaShortcutArchive, signedShortcutSize, authDataSize + 0x495c, &aaSize);
-    free(aeaShortcutArchive);
-    if (!aaRawArchive) {
+    size_t aarSize;
+    uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize);
+    if (!aar) {
+        fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return 0;
     }
+    /* In the future replace this with a neo_aea_destroy call */
+    free(aea->encodedData);
+    free(aea);
     
     /* Unwrap Shortcut.wflow from Apple Archive into buffer */
     
