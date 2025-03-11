@@ -351,3 +351,19 @@ uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedSh
     free(aar);
     return unsignedShortcut;
 }
+
+uint8_t *extract_signed_shortcut_buffer_aar(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *aarSize) {
+    /* Extract aar from aea using libNeoAppleArchive */
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(signedShortcut, signedShortcutSize);
+    if (!aea) {
+        fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
+        return 0;
+    }
+    uint8_t *aar = neo_aea_archive_extract_data(aea, aarSize);
+    if (!aar) {
+        fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
+        return 0;
+    }
+    free(aea);
+    return aar;
+}

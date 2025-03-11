@@ -13,5 +13,6 @@ uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, siz
 int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath);
 int extract_contact_signed_shortcut(const char *signedShortcutPath, const char *destPath) __attribute__((deprecated)); /* Use extract_signed_shortcut instead, same functionality */
 uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *unsignedShortcutSize);
+uint8_t *extract_signed_shortcut_buffer_aar(uint8_t *signedShortcut, size_t signedShortcutSize, size_t *aarSize);
 
 #endif /* libshortcutsign_extract_h */

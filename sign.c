@@ -88,64 +88,34 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
     return hmac;
 }
 
-__attribute__((visibility ("hidden"))) static void *do_hkdf(const void *context, size_t contextLen, const void *key) {
-    unsigned char *output = malloc(32);
-    if (!output) {
-        fprintf(stderr, "Failed to allocate memory for HKDF output\n");
+__attribute__((visibility ("hidden"))) static void *do_hkdf(void *context, size_t contextLen, void *key) {
+    void *derivedKey = malloc(512);
+    if (!derivedKey) {
         return NULL;
     }
-
-    /* Create HKDF context */
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
-    if (!ctx) {
-        fprintf(stderr, "Failed to create HKDF context\n");
-        free(output);
+    EVP_KDF* kdf;
+    if ((kdf = EVP_KDF_fetch(NULL, "hkdf", NULL)) == NULL) {
         return NULL;
     }
-
-    /* Initialize HKDF */
-    if (EVP_PKEY_derive_init(ctx) <= 0) {
-        fprintf(stderr, "Failed to initialize HKDF context\n");
-        EVP_PKEY_CTX_free(ctx);
-        free(output);
+    EVP_KDF_CTX* ctx = EVP_KDF_CTX_new(kdf);
+    EVP_KDF_free(kdf);
+    if (ctx == NULL) {
         return NULL;
     }
-
-    /* Set HKDF hash function to SHA-256 */
-    if (EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) <= 0) {
-        fprintf(stderr, "Failed to set HKDF hash function\n");
-        EVP_PKEY_CTX_free(ctx);
-        free(output);
+    OSSL_PARAM params[4] = {
+        OSSL_PARAM_construct_utf8_string("digest", "sha256", sizeof("sha256")),
+        OSSL_PARAM_construct_octet_string("key", key, 32),
+        OSSL_PARAM_construct_octet_string("info", context, contextLen),
+        OSSL_PARAM_construct_end()
+    };
+    if (EVP_KDF_CTX_set_params(ctx, params) <= 0) {
         return NULL;
     }
-
-    /* Set HKDF key (input key material) */
-    if (EVP_PKEY_CTX_set1_hkdf_key(ctx, key, 32) <= 0) {
-        fprintf(stderr, "Failed to set HKDF key\n");
-        EVP_PKEY_CTX_free(ctx);
-        free(output);
+    if (EVP_KDF_derive(ctx, derivedKey, 32, NULL) <= 0) {
         return NULL;
     }
-
-    /* Set HKDF info (context) */
-    if (EVP_PKEY_CTX_add1_hkdf_info(ctx, context, contextLen) <= 0) {
-        fprintf(stderr, "Failed to set HKDF info\n");
-        EVP_PKEY_CTX_free(ctx);
-        free(output);
-        return NULL;
-    }
-
-    /* Derive the output key */
-    size_t out_len = 32;
-    if (EVP_PKEY_derive(ctx, output, &out_len) <= 0) {
-        fprintf(stderr, "Failed to derive HKDF output\n");
-        EVP_PKEY_CTX_free(ctx);
-        free(output);
-        return NULL;
-    }
-
-    EVP_PKEY_CTX_free(ctx);
-    return output;
+    EVP_KDF_CTX_free(ctx);
+    return derivedKey;
 }
 
 /* Helper function to perform HKDF using OpenSSL */
