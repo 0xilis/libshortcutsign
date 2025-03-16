@@ -36,9 +36,9 @@ output: $(buildDir)
 
 	@# Create shared library and use version script
 	@if [ "$(OS)" = "Darwin" ]; then\
-		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/libzbitmap/lib/libzbitmap.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
 	else\
-		$(CC) -shared -o build/usr/lib/libshortcutsign.so build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS);\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.so build/obj/*.o build/lzfse/lib/liblzfse.a libs/libNeoAppleArchive/build/libzbitmap/lib/libzbitmap.a libs/libNeoAppleArchive/build/usr/lib/libNeoAppleArchive.a -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS);\
 	fi
 
 $(buildDir):

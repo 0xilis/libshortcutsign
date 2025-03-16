@@ -299,7 +299,7 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
         return -1;
     }
     size_t aarSize;
-    uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize);
+    uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize, 0, 0, 0, 0, 0, 0);
     if (!aar) {
         fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return -1;
@@ -338,7 +338,7 @@ uint8_t *extract_signed_shortcut_buffer(uint8_t *signedShortcut, size_t signedSh
         return 0;
     }
     size_t aarSize;
-    uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize);
+    uint8_t *aar = neo_aea_archive_extract_data(aea, &aarSize, 0, 0, 0, 0, 0, 0);
     if (!aar) {
         fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return 0;
@@ -359,7 +359,7 @@ uint8_t *extract_signed_shortcut_buffer_aar(uint8_t *signedShortcut, size_t sign
         fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
         return 0;
     }
-    uint8_t *aar = neo_aea_archive_extract_data(aea, aarSize);
+    uint8_t *aar = neo_aea_archive_extract_data(aea, aarSize, 0, 0, 0, 0, 0, 0);
     if (!aar) {
         fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
         return 0;
