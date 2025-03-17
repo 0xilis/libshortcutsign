@@ -4,7 +4,6 @@
 #include <inttypes.h>
 
 #include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
-#include "libs/libNeoAppleArchive/libNeoAppleArchive/neo_aea_archive.h"
 
 #include "build/lzfse/include/lzfse.h"
 
@@ -27,7 +26,7 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     fseek(fp, 0, SEEK_END);
     size_t size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    char *archive = malloc(size * sizeof(char));
+    char *archive = malloc(size);
     /*
      * Explained better in comment below, but
      * a process may write to a file while
@@ -41,7 +40,7 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
      * it doesn't contain any leftover memory
      * left.
      */
-    memset(archive, 0, size * sizeof(char));
+    memset(archive, 0, size);
     /* copy bytes to binary */
     int c;
     size_t n = 0;
@@ -187,7 +186,7 @@ __attribute__((visibility ("hidden"))) static int unwrap_file_out_of_neo_aa(uint
             }
             fwrite(item->encodedBlobData, item->encodedBlobDataSize, 1, fp);
             fclose(fp);
-            neo_aa_archive_plain_destroy(archive);
+            neo_aa_archive_plain_destroy_nozero(archive);
             return 0;
         }
         free(patStr);
@@ -229,7 +228,7 @@ __attribute__((visibility ("hidden"))) static uint8_t *unwrap_file_out_of_neo_aa
             if (outBufferSize) {
                 *outBufferSize = item->encodedBlobDataSize;
             }
-            neo_aa_archive_plain_destroy(archive);
+            neo_aa_archive_plain_destroy_nozero(archive);
             return buffer;
         }
         free(patStr);
