@@ -18,7 +18,7 @@
 */
 uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     /* load shortcut into memory */
-    FILE *fp = fopen(path, "r");
+    FILE *fp = fopen(path, "rb");
     if (!fp) {
         fprintf(stderr,"libshortcutsign: failed to open file\n");
         return 0;
@@ -27,51 +27,19 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     size_t size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
     char *archive = malloc(size);
-    /*
-     * Explained better in comment below, but
-     * a process may write to a file while
-     * this is going on so size would be
-     * bigger than the bytes we copy,
-     * making it hit EOF before size
-     * is hit. This means that potentially
-     * other memory from the process may
-     * be kept here. To prevent this,
-     * we 0 out our buffer to make sure
-     * it doesn't contain any leftover memory
-     * left.
-     */
-    memset(archive, 0, size);
     /* copy bytes to binary */
-    int c;
-    size_t n = 0;
-    while ((c = fgetc(fp)) != EOF) {
-        if (n > size) {
-            /*
-             * If, at any point, a file is modified during / before copy,
-             * ex it has a really small size, but another process
-             * quickly modifies it after binary_size is saved but
-             * before / during the bytes are copied to the buffer,
-             * then it would go past the buffer, resulting
-             * in a heap overflow from our race. Fixing this
-             * problem by checking if n ever reaches past
-             * the initial binary_size...
-             */
-            free(archive);
-            fclose(fp);
-            fprintf(stderr,"libshortcutsign: reached past binarySize\n");
-            return 0;
-        }
-        archive[n++] = (char) c;
+    size_t n = fread(archive, 1, size, fp);
+    if (n < size) {
+        free(archive);
+        fclose(fp);
+        fprintf(stderr,"libshortcutsign: failed to read entire auth data\n");
+        return 0;
     }
     size_t archiveSize = n;
     fclose(fp);
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
-    /* We assume it's located at 0x8-0xB */
-    register const char *sptr = archive + 0xB;
-    size_t authDataSizeLocal = *sptr << 24;
-    authDataSizeLocal += *(sptr - 1) << 16;
-    authDataSizeLocal += *(sptr - 2) << 8;
-    authDataSizeLocal += *(sptr - 3);
+    uint32_t authDataSizeLocal;
+    memcpy(&authDataSizeLocal, archive + 8, 4);
     if (authDataSizeLocal > archiveSize-0x293c) {
         /* 
          * The encrypted data for for signed shortcuts, both contact signed
@@ -110,12 +78,8 @@ uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, siz
     char *archive = (char *)buffer;
     size_t archiveSize = bufferSize;
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
-    /* We assume it's located at 0x8-0xB */
-    register const char *sptr = archive + 0xB;
-    size_t _authDataSize = *sptr << 24;
-    _authDataSize += *(sptr - 1) << 16;
-    _authDataSize += *(sptr - 2) << 8;
-    _authDataSize += *(sptr - 3);
+    uint32_t _authDataSize;
+    memcpy(&_authDataSize, archive + 8, 4);
     if (_authDataSize > archiveSize-0x293c) {
         /* 
          * The encrypted data for for signed shortcuts, both contact signed

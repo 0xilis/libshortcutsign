@@ -9,8 +9,9 @@
 #include <inttypes.h>
 
 int verify_dict_auth_data(uint8_t *authData, size_t authDataSize);
-int verify_contact_signed_auth_data(uint8_t *authData, size_t authDataSize);
+int __attribute__((deprecated)) verify_contact_signed_auth_data(uint8_t *authData, size_t authDataSize); /* Use verify_dict_auth_data instead */
 int verify_contact_signed_shortcut(const char *signedShortcutPath);
+int verify_signed_shortcut(const char *signedShortcutPath);
 
 /* Types of signed shortcuts */
 typedef enum {

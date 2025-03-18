@@ -39,6 +39,14 @@ libshortcutsign provides a Makefile for easily building it as a static library a
 
 Contributions are welcome! Not just to the code, but also better documentation would also be appreciated; shortcuts signing is highly undocumented and to be honest I'm not sure how to say exactly some of the things I know about it...
 
+# TODO
+
+* Once libNeoAppleArchive neo_aea_archive_sign function is implemented, implement it in libshortcutsign
+* Support iCloud signed verification
+* function to get iCloud ID of iCloud signed shortcuts
+* Improve Documentation
+* Support MinGW for Windows
+
 Special thanks to plx for contributions relating to OpenSSL 3.
 
 Minor contributions will also be appreciated.
