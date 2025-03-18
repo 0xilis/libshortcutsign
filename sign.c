@@ -176,7 +176,7 @@ int resign_shortcut_prologue(uint8_t *signedShortcut, void *privateKey, size_t p
 
     /* TODO: Don't just support X9.63 keys, also support PEM encoded */
     size_t authDataSize = 0;
-    memcpy(&authDataSize, signedShortcut + 0xB, 4);
+    memcpy(&authDataSize, signedShortcut + 8, 4);
 
     /* zero out the sig for the hash */
     memset(signedShortcut + authDataSize + 0xc, 0, 128);  /* Zero out the signature field */
@@ -336,7 +336,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
 
     /* Extract authDataSize from signedShortcut */
     size_t authDataSize;
-    memcpy(&authDataSize, _signedShortcut + 0xB, 4);
+    memcpy(&authDataSize, _signedShortcut + 8, 4);
 
     /* Fix authDataSize + offsets */
     memcpy(_signedShortcut + authDataSize + 0xec, &archivedDirSize, 4);
