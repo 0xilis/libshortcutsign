@@ -307,7 +307,7 @@ __attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert
 
 
 /* Function to parse the plist file and extract the AppleIDCertificateChain */
-__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned) {
+__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned, int iCloudAllow) {
     plist_t plist;
     if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");
@@ -319,10 +319,11 @@ __attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uin
     if (!cert_chain) {
         *iCloudSigned = 1;
         cert_chain = plist_dict_get_item(plist, "SigningCertificateChain");
+        if (!iCloudAllow) {
+            /* TODO: Finish iCloud verification */
 
-        /* TODO: Finish iCloud verification */
-
-        cert_chain = NULL;
+            cert_chain = NULL;
+        }
 
         if (!cert_chain || plist_get_node_type(cert_chain) != PLIST_ARRAY) {
             fprintf(stderr, "Invalid plist format or missing cert chain\n");
@@ -365,7 +366,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 0) != 0) {
         return -1;
     }
 
@@ -518,7 +519,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 0) != 0) {
         free(authData);
         return -1;
     }
@@ -649,7 +650,7 @@ void print_shortcut_cert_info(uint8_t *buffer, size_t bufferSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 1) != 0) {
         free(authData);
         return;
     }
