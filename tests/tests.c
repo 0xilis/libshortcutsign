@@ -54,11 +54,35 @@ int main(void) {
         fprintf(stderr,"verificationTest.shortcut failed verify_signed_shortcut_buffer\n");
         return -1;
     }
-    /* In the future, call resign_shortcut_prologue to purposely mess up signature,
-     * then call verify_signed_shortcut_buffer to further test verification
-     */
+    /* Load the not-so-private key to make sure that verification fails... */
+    size_t keySize = 0;
+    uint8_t *privateKey = load_binary("libshortcutsignPrivateKeyTestSubject.dat", &keySize);
+    if (!privateKey) {
+        fprintf(stderr,"libshortcutsignPrivateKeyTestSubject.dat could not be loaded\n");
+        return -1;
+    }
+    if (resign_shortcut_prologue(shortcut, privateKey, keySize)) {
+        fprintf(stderr,"verificationTest.shortcut failed resign_shortcut_prologue\n");
+        return -1;
+    }
+    free(privateKey);
+    if (!verify_signed_shortcut_buffer(shortcut, shortcutSize)) {
+        fprintf(stderr,"verificationTest.shortcut failed verify_signed_shortcut_buffer test 2: was meant to fail, but verification returned yes\n");
+        return -1;
+    }
+    /* Even after we resigned prologue so verification fails, auth data should still be valid */
+    size_t authDataSize;
+    uint8_t *authData = auth_data_from_shortcut_buffer(shortcut, shortcutSize, &authDataSize);
+    if (!authData) {
+        fprintf(stderr,"authData could not be loaded from verificationTest.shortcut\n");
+        return -1;
+    }
     free(shortcut);
-    
+    if (verify_dict_auth_data(authData, authDataSize)) {
+        fprintf(stderr,"verificationTest.shortcut failed verify_dict_auth_data\n");
+        return -1;
+    }
+    /* In the future, program extract_signed_shortcut tests, and check hash to ensure match */
     printf("Tests successful\n");
     return 0;
 }

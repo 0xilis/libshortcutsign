@@ -298,11 +298,7 @@ __attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert
         X509_free(cert);
         return NULL;
     }
-/*
-    if (EVP_PKEY_id(evp_pkey) != EVP_PKEY_RSA) {
-        fprintf(stderr, "Certificate does not contain an RSA public key\n");
-        return NULL;
-    }*/
+
     X509_free(cert);
 
     return evp_pkey;
