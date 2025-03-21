@@ -38,6 +38,7 @@ __attribute__((visibility ("hidden"))) static uint8_t *load_binary(const char *s
 }
 
 int main(void) {
+    printf("Starting tests...\n");
     size_t shortcutSize = 0;
     uint8_t *shortcut = load_binary("verificationTest.shortcut", &shortcutSize);
     if (!shortcut) {
@@ -58,5 +59,6 @@ int main(void) {
      */
     free(shortcut);
     
+    printf("Tests successful\n");
     return 0;
 }
