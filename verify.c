@@ -16,7 +16,7 @@
 #include "extract.h"
 #include "verify.h"
 #include "res.h"
-#include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
+#include <libNeoAppleArchive.h>
 
 /* Function to convert EVP_PKEY to X9.63 encoded ECDSA-P256 public key */
 __attribute__((visibility ("hidden"))) int convert_evp_pkey_to_x963(EVP_PKEY *pkey, uint8_t *out, size_t *out_len) {
@@ -418,8 +418,30 @@ int __attribute__((deprecated)) verify_contact_signed_shortcut(const char *signe
 }
 
 int verify_signed_shortcut(const char *signedShortcutPath) {
+    /* load AEA archive into memory */
+    FILE *fp = fopen(signedShortcutPath,"rb");
+    if (!fp) {
+        fprintf(stderr,"libshortcutsign: verify_signed_shortcut failed to find path\n");
+        return -1;
+    }
+    fseek(fp, 0, SEEK_END);
+    size_t binarySize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    uint8_t *aeaShortcutArchive = malloc(binarySize);
+    size_t n = fread(aeaShortcutArchive, 1, binarySize, fp);
+    if (n != binarySize) {
+        fprintf(stderr, "libshortcutsign: failed to read all of file\n");
+        return -1;
+    }
+    fclose(fp);
+    int result = verify_signed_shortcut_buffer(aeaShortcutArchive, binarySize);
+    free(aeaShortcutArchive);
+    return result;
+}
+
+int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     size_t authDataSize;
-    uint8_t *authData = auth_data_from_shortcut(signedShortcutPath, &authDataSize);
+    uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
     if (!authData) {
         fprintf(stderr,"libshortcutsign: verification failed to extract authData\n");
         return -1;
@@ -429,7 +451,7 @@ int verify_signed_shortcut(const char *signedShortcutPath) {
         return -1;
     }
     /* TODO: This has a TOCTOU flow, remember to fix it before production!!! */
-    NeoAEAArchive aea = neo_aea_archive_with_path(signedShortcutPath);
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(buffer, bufferSize);
     if (!aea) {
         fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
         return -1;
@@ -487,19 +509,11 @@ int verify_signed_shortcut(const char *signedShortcutPath) {
         plist_get_data_val(signingPublicKeyItem, (char **)&signingPublicKey, &signingPublicKeyLen);
     }
 
-    // Ensure signingPublicKey is valid before using it
+    /* Ensure signingPublicKey is valid before using it */
     if (!signingPublicKey) {
         fprintf(stderr, "Failed to extract or allocate signingPublicKey\n");
         return -1;
     }
-
-/*
-printf("Public Key (hex): ");
-for (size_t i2 = 0; i2 < 65; i2++) {
-    printf("%02X", signingPublicKey[i2]);
-}
-printf("\n");
-*/
 
     int isVerified = neo_aea_archive_verify(aea, signingPublicKey);
 
@@ -511,6 +525,7 @@ printf("\n");
     free(certDataArray);
     free(certSizesList);
     free(authData);
+    neo_aea_archive_destroy(aea);
     return isVerified;
 }
 

@@ -10,8 +10,9 @@
 
 int verify_dict_auth_data(uint8_t *authData, size_t authDataSize);
 int __attribute__((deprecated)) verify_contact_signed_auth_data(uint8_t *authData, size_t authDataSize); /* Use verify_dict_auth_data instead */
-int verify_contact_signed_shortcut(const char *signedShortcutPath);
+int __attribute__((deprecated)) verify_contact_signed_shortcut(const char *signedShortcutPath); /* Use verify_signed_shortcut instead */
 int verify_signed_shortcut(const char *signedShortcutPath);
+int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize);
 
 /* Types of signed shortcuts */
 typedef enum {

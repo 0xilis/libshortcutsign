@@ -3,9 +3,8 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-#include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
-
-#include "build/lzfse/include/lzfse.h"
+#include <libNeoAppleArchive.h>
+#include <lzfse.h>
 
 /* 
  * auth_data_from_shortcut
@@ -75,12 +74,10 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     return authData;
 }
 uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, size_t *authDataSize) {
-    char *archive = (char *)buffer;
-    size_t archiveSize = bufferSize;
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
     uint32_t _authDataSize;
-    memcpy(&_authDataSize, archive + 8, 4);
-    if (_authDataSize > archiveSize-0x293c) {
+    memcpy(&_authDataSize, buffer + 8, 4);
+    if (_authDataSize > bufferSize-0x293c) {
         /* 
          * The encrypted data for for signed shortcuts, both contact signed
          * and icloud signed, should be at authDataSize+0x293c. If our authDataSize
@@ -105,9 +102,8 @@ uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, siz
     unsigned int i = _authDataSize;
     fill_buffer:
     i--;
-    authData[i] = archive[i+0xc];
+    authData[i] = buffer[i+0xc];
     if (i != 0) {goto fill_buffer;};
-    free(archive);
     /* save bufferSize if it was specified */
     if (authDataSize) {
         *authDataSize = _authDataSize;
@@ -209,7 +205,7 @@ __attribute__((visibility ("hidden"))) static uint8_t *unwrap_file_out_of_neo_aa
  */
 int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath) {
     /* load AEA archive into memory */
-    FILE *fp = fopen(signedShortcutPath,"r");
+    FILE *fp = fopen(signedShortcutPath,"rb");
     if (!fp) {
         fprintf(stderr,"libshortcutsign: extract_signed_shortcut failed to find path\n");
         return -1;
@@ -218,41 +214,10 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     size_t binarySize = ftell(fp);
     fseek(fp, 0, SEEK_SET);
     uint8_t *aeaShortcutArchive = malloc(binarySize);
-    /*
-     * Explained better in comment below, but
-     * a process may write to a file while
-     * this is going on so binary_size would be
-     * bigger than the bytes we copy,
-     * making it hit EOF before binary_size
-     * is hit. This means that potentially
-     * other memory from the process may
-     * be kept here. To prevent this,
-     * we 0 out our buffer to make sure
-     * it doesn't contain any leftover memory
-     * left.
-     */
-    memset(aeaShortcutArchive, 0, binarySize);
-    /* copy bytes to binary, byte by byte... */
-    int c;
-    size_t n = 0;
-    while ((c = fgetc(fp)) != EOF) {
-        if (n > binarySize) {
-            /*
-             * If, at any point, a file is modified during / before copy,
-             * ex it has a really small size, but another process
-             * quickly modifies it after binary_size is saved but
-             * before / during the bytes are copied to the buffer,
-             * then it would go past the buffer, resulting
-             * in a heap overflow from our race. Fixing this
-             * problem by checking if n ever reaches past
-             * the initial binary_size...
-             */
-            free(aeaShortcutArchive);
-            fclose(fp);
-            fprintf(stderr,"libshortcutsign: extract_signed_shortcut reached past binarySize\n");
-            return -1;
-        }
-        aeaShortcutArchive[n++] = (char) c;
+    size_t n = fread(aeaShortcutArchive, 1, binarySize, fp);
+    if (n != binarySize) {
+        fprintf(stderr, "libshortcutsign: failed to read all of file\n");
+        return -1;
     }
     fclose(fp);
     /* Extract aar from aea using libNeoAppleArchive */

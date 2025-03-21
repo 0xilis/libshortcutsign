@@ -13,15 +13,12 @@
 #include <openssl/ec.h>
 #include <openssl/kdf.h>
 #include <openssl/param_build.h>
-#include "build/lzfse/include/lzfse.h"
-#include "libs/libNeoAppleArchive/libNeoAppleArchive/libNeoAppleArchive.h"
+#include <lzfse.h>
+#include <libNeoAppleArchive.h>
 #include "res.h"
 
 #define EMBEDDED_SIGNED_DATA_SIZE 98099
 #define EMBEDDED_SIGNED_DATA_ADS 0x57f
-
-/* Temporarily use private lnaa API until I finish public set_field_string */
-void neo_aa_header_add_field_string(NeoAAHeader header, uint32_t key, size_t stringSize, char *s);
 
 __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
@@ -435,7 +432,7 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     }
     time_t currentDate = time(NULL);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'D');
-    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
+    neo_aa_header_set_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1ed);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
     /* use currentTime for creation and modification time */
@@ -455,7 +452,7 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
         return -1;
     }
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
-    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
+    neo_aa_header_set_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1a4);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
     neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
@@ -550,7 +547,7 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     }
     time_t currentDate = time(NULL);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'D');
-    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
+    neo_aa_header_set_field_string(header, NEO_AA_FIELD_C("PAT"), 0, 0);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1ed);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
     /* use currentTime for creation and modification time */
@@ -570,7 +567,7 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
         return 0;
     }
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
-    neo_aa_header_add_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
+    neo_aa_header_set_field_string(header, NEO_AA_FIELD_C("PAT"), strlen("Shortcut.wflow"), "Shortcut.wflow");
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("MOD"), 2, 0x1a4);
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("FLG"), 1, 0);
     neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);

@@ -1,6 +1,6 @@
 buildDir = build/obj
 CC = clang
-CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC
+CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/
 
 # Paths for lzfse
 LZFSE_DIR = libs/lzfse
@@ -44,9 +44,9 @@ output: $(buildDir)
 $(buildDir):
 	@echo "Creating Build Directory"
 	mkdir -p build/usr/lib
-	mkdir build/usr/bin
-	mkdir build/obj
-	mkdir build/lzfse
+	mkdir -p build/usr/bin
+	mkdir -p build/obj
+	mkdir -p build/lzfse
 
 clean:
 	@echo "Cleaning build files..."
