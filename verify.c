@@ -10,6 +10,8 @@
 #include <openssl/core.h>
 #include <openssl/core_names.h>
 #include <openssl/evp.h>
+#include <openssl/encoder.h>
+#include <openssl/x509.h>
 #include <plist/plist.h>
 #include <openssl/err.h>
 #include <inttypes.h>
@@ -20,6 +22,7 @@
 
 /* Function to convert EVP_PKEY to X9.63 encoded ECDSA-P256 public key */
 __attribute__((visibility ("hidden"))) int convert_evp_pkey_to_x963(EVP_PKEY *pkey, uint8_t *out, size_t *out_len) {
+    /* TODO: THIS FUNCTION IS CURRENTLY NOT YET FUNCTIONAL */
     if (!pkey || !out || !out_len) {
         fprintf(stderr, "Invalid input parameters\n");
         return -1;
@@ -295,11 +298,11 @@ __attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert
         X509_free(cert);
         return NULL;
     }
-
+/*
     if (EVP_PKEY_id(evp_pkey) != EVP_PKEY_RSA) {
         fprintf(stderr, "Certificate does not contain an RSA public key\n");
         return NULL;
-    }
+    }*/
     X509_free(cert);
 
     return evp_pkey;
@@ -307,7 +310,7 @@ __attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert
 
 
 /* Function to parse the plist file and extract the AppleIDCertificateChain */
-__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned, int iCloudAllow) {
+__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned, int iCloudAllowed) {
     plist_t plist;
     if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");
@@ -319,12 +322,12 @@ __attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uin
     if (!cert_chain) {
         *iCloudSigned = 1;
         cert_chain = plist_dict_get_item(plist, "SigningCertificateChain");
-        if (!iCloudAllow) {
-            /* TODO: Finish iCloud verification */
-
+        if (!iCloudAllowed) {
+            fprintf(stderr, "iCloud verification not yet supported\n");
             cert_chain = NULL;
+            plist_free(plist);
+            return -1;
         }
-
         if (!cert_chain || plist_get_node_type(cert_chain) != PLIST_ARRAY) {
             fprintf(stderr, "Invalid plist format or missing cert chain\n");
             plist_free(plist);
@@ -366,7 +369,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 0) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 1) != 0) {
         return -1;
     }
 
@@ -572,6 +575,13 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
         return -1;
     }
 
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(buffer, bufferSize);
+    if (!aea) {
+        fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
+        return -1;
+    }
+    int isVerified = neo_aea_archive_verify(aea, signingPublicKey);
+
     /* Free the allocated memory */
     size_t i;
     for (i = 0; i < certCount; i++) {
@@ -580,13 +590,6 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     free(certDataArray);
     free(certSizesList);
     free(authData);
-
-    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(buffer, bufferSize);
-    if (!aea) {
-        fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
-        return -1;
-    }
-    int isVerified = neo_aea_archive_verify(aea, signingPublicKey);
 
     neo_aea_archive_destroy(aea);
     return isVerified;
