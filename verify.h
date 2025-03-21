@@ -23,5 +23,6 @@ typedef enum {
 } SSFormat;
 
 SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize);
+void print_shortcut_cert_info(uint8_t *buffer, size_t bufferSize);
 
 #endif /* libshortcutsign_verify_h */

@@ -66,6 +66,67 @@ __attribute__((visibility ("hidden"))) int convert_evp_pkey_to_x963(EVP_PKEY *pk
     return 0; /* Success */
 }
 
+void print_certificate_info(X509 *cert) {
+    if (!cert) {
+        fprintf(stderr, "Invalid certificate\n");
+        return;
+    }
+
+    /* Print subject name */
+    X509_NAME *subject = X509_get_subject_name(cert);
+    if (subject) {
+        char *subject_str = X509_NAME_oneline(subject, NULL, 0);
+        if (subject_str) {
+            printf("Subject: %s\n", subject_str);
+            OPENSSL_free(subject_str);
+        }
+    }
+
+    /* Print issuer name */
+    X509_NAME *issuer = X509_get_issuer_name(cert);
+    if (issuer) {
+        char *issuer_str = X509_NAME_oneline(issuer, NULL, 0);
+        if (issuer_str) {
+            printf("Issuer: %s\n", issuer_str);
+            OPENSSL_free(issuer_str);
+        }
+    }
+
+    /* Print the validity period */
+    const ASN1_TIME *notBefore = X509_get0_notBefore(cert);
+    const ASN1_TIME *notAfter = X509_get0_notAfter(cert);
+    if (notBefore && notAfter) {
+        char notBeforeStr[128], notAfterStr[128];
+        ASN1_TIME_to_tm(notBefore, NULL);
+        ASN1_TIME_to_tm(notAfter, NULL);
+        if (ASN1_TIME_to_tm(notBefore, (struct tm*)notBeforeStr) && ASN1_TIME_to_tm(notAfter, (struct tm*)notAfterStr)) {
+            printf("Validity: %s - %s\n", notBeforeStr, notAfterStr);
+        }
+    }
+
+    /* Print serial number */
+    ASN1_INTEGER *serialNumber = X509_get_serialNumber(cert);
+    if (serialNumber) {
+        unsigned char *serialHex = NULL;
+        int serialLength = i2d_ASN1_INTEGER(serialNumber, &serialHex);
+        if (serialLength > 0) {
+            printf("Serial Number: ");
+            for (int i = 0; i < serialLength; i++) {
+                printf("%02X", serialHex[i]);
+            }
+            printf("\n");
+            OPENSSL_free(serialHex);
+        }
+    }
+
+    /* Print the public key */
+    EVP_PKEY *pubKey = X509_get_pubkey(cert);
+    if (pubKey) {
+        printf("Public Key Algorithm: %s\n", OBJ_nid2ln(EVP_PKEY_base_id(pubKey)));
+        EVP_PKEY_free(pubKey);
+    }
+}
+
 /* Function to load a certificate chain from an array of certificate data */
 __attribute__((visibility ("hidden"))) static STACK_OF(X509) *load_certificate_chain(uint8_t **certDataArray, size_t certCount, size_t *certSizesList) {
     STACK_OF(X509) *chain = sk_X509_new_null();
@@ -450,12 +511,6 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
         /* Invalid auth data */
         return -1;
     }
-    /* TODO: This has a TOCTOU flow, remember to fix it before production!!! */
-    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(buffer, bufferSize);
-    if (!aea) {
-        fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
-        return -1;
-    }
     /* I should probably move this to a separate verify shortcut prologue func... */
     uint8_t **certDataArray;
     size_t certCount;
@@ -464,6 +519,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
 
     /* Parse the plist and extract the certificate chain */
     if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
+        free(authData);
         return -1;
     }
 
@@ -515,8 +571,6 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
         return -1;
     }
 
-    int isVerified = neo_aea_archive_verify(aea, signingPublicKey);
-
     /* Free the allocated memory */
     size_t i;
     for (i = 0; i < certCount; i++) {
@@ -525,6 +579,14 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     free(certDataArray);
     free(certSizesList);
     free(authData);
+
+    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(buffer, bufferSize);
+    if (!aea) {
+        fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
+        return -1;
+    }
+    int isVerified = neo_aea_archive_verify(aea, signingPublicKey);
+
     neo_aea_archive_destroy(aea);
     return isVerified;
 }
@@ -571,4 +633,56 @@ SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
     }
 
     return SHORTCUT_SIGNED_CONTACT;
+}
+
+void print_shortcut_cert_info(uint8_t *buffer, size_t bufferSize) {
+    size_t authDataSize;
+    uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
+    if (!authData) {
+        fprintf(stderr,"libshortcutsign: failed to extract authData\n");
+        return;
+    }
+
+    uint8_t **certDataArray;
+    size_t certCount;
+    size_t *certSizesList;
+    int iCloudSigned;
+
+    /* Parse the plist and extract the certificate chain */
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
+        free(authData);
+        return;
+    }
+
+    /* Load the certificate chain */
+    STACK_OF(X509) *chain = load_certificate_chain(certDataArray, certCount, certSizesList);
+    if (!chain) {
+        fprintf(stderr, "Error loading certificate chain\n");
+        free(certDataArray);
+        free(certSizesList);
+        free(authData);
+        return;
+    }
+
+    int chain_size = sk_X509_num(chain);
+
+    for (int i = 0; i < chain_size; i++) {
+        X509 *cert = sk_X509_value(chain, i); 
+        if (cert) {
+            printf("Certificate %d:\n", i + 1);
+            print_certificate_info(cert);
+            printf("\n");
+        } else {
+            fprintf(stderr, "Error retrieving certificate at index %d\n", i);
+        }
+    }
+
+    /* Free the allocated memory */
+    size_t i;
+    for (i = 0; i < certCount; i++) {
+        free(certDataArray[i]);
+    }
+    free(certDataArray);
+    free(certSizesList);
+    free(authData);
 }
