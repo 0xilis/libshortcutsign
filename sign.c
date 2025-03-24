@@ -6,7 +6,6 @@
 #include <openssl/pem.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
-#include <openssl/ossl_typ.h>
 #include <openssl/hmac.h>
 #include <openssl/core_names.h>
 #include <openssl/err.h>
@@ -294,7 +293,6 @@ int resign_shortcut_prologue(uint8_t *signedShortcut, void *privateKey, size_t p
     unsigned int sigLen;
     if (EVP_SignFinal(md_ctx, signature, &sigLen, pkey) != 1) {
         fprintf(stderr, "shortcut-sign: failed to sign the hash\n");
-        ERR_print_errors_fp(stderr);
         free(signature);
         EVP_MD_CTX_free(md_ctx);
         EVP_PKEY_free(pkey);

@@ -1,0 +1,10 @@
+Package: com.0xilis.libshortcutsign
+Name: libshortcutsign
+Depends: firmware (>= 7.0), openssl, libplist3, com.0xilis.libneoapplearchive
+Version: 0.0.1
+Architecture: iphoneos-arm
+Description: Open-Source library for signed shortcuts.
+Maintainer: Snoolie K
+Author: Snoolie K
+Section: System
+Tag: role::developer

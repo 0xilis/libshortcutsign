@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
-
+#include "extract.h"
 #include <libNeoAppleArchive.h>
 #include <lzfse.h>
 
@@ -25,7 +25,7 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     fseek(fp, 0, SEEK_END);
     size_t size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    char *archive = malloc(size);
+    uint8_t *archive = malloc(size);
     /* copy bytes to binary */
     size_t n = fread(archive, 1, size, fp);
     if (n < size) {
@@ -34,43 +34,9 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
         fprintf(stderr,"libshortcutsign: failed to read entire auth data\n");
         return 0;
     }
-    size_t archiveSize = n;
     fclose(fp);
-    /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
-    uint32_t authDataSizeLocal;
-    memcpy(&authDataSizeLocal, archive + 8, 4);
-    if (authDataSizeLocal > archiveSize-0x293c) {
-        /* 
-         * The encrypted data for for signed shortcuts, both contact signed
-         * and icloud signed, should be at authDataSize+0x293c. If our authDataSize
-         * reaches to or past the encrypted data, then it's too big.
-        */
-        fprintf(stderr,"libshortcutsign: authDataSizeLocal reaches past data start\n");
-        return 0;
-    }
-    /* we got authDataSizeLocal, now fill buffer */
-    uint8_t *authData = (uint8_t *)malloc(authDataSizeLocal);
-    /*
-     * the reason why we are doing a reverse
-     * iteration is because doing it this way
-     * will allow arm devices to take advantage
-     * of the cbnz instruction, which should
-     * mean about a 2 cycle save per iteration.
-     *
-     * also we're going to blindly trust that authDataSize
-     * is not larger than the buffer, because unless
-     * you malform a aea file it should never be.
-    */
-    unsigned int i = authDataSizeLocal;
-    fill_buffer:
-    i--;
-    authData[i] = archive[i+0xc];
-    if (i != 0) {goto fill_buffer;};
+    uint8_t *authData = auth_data_from_shortcut_buffer(archive, size, authDataSize);
     free(archive);
-    /* save bufferSize if it was specified */
-    if (authDataSize) {
-        *authDataSize = authDataSizeLocal;
-    }
     return authData;
 }
 uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, size_t *authDataSize) {

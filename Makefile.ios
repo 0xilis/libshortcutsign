@@ -1,0 +1,17 @@
+ARCHS = arm64
+TARGET := iphone:clang:latest:6.0
+# PREFIX = $(THEOS)/toolchain/Xcode.xctoolchain/usr/bin/
+PREFIX = /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/
+SYSROOT = $(THEOS)/sdks/iPhoneOS14.4.sdk
+
+include $(THEOS)/makefiles/common.mk
+
+LIBRARY_NAME = libshortcutsign
+
+libshortcutsign_FILES = $(wildcard *.c) $(wildcard libs/libNeoAppleArchive/libNeoAppleArchive/*.c) $(filter-out libs/lzfse/src/lzfse_main.c, $(wildcard libs/lzfse/src/*.c)) libs/libNeoAppleArchive/libNeoAppleArchive/compression/libzbitmap/libzbitmap.c
+libshortcutsign_LIBRARIES = plist-2.0.3
+libshortcutsign_CFLAGS = -I./ -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ilibs/libNeoAppleArchive/libNeoAppleArchive/compression/libzbitmap -Ilibs/libNeoAppleArchive/libNeoAppleArchive/compression/lzfse/src -Iios-support/ -DOPENSSL_API_COMPAT=30400 -Wno-missing-declarations
+libshortcutsign_LDFLAGS = -L./ios-support/ -lz -lssl -lcrypto
+libshortcutsign_INSTALL_PATH = /usr/lib
+
+include $(THEOS_MAKE_PATH)/library.mk
