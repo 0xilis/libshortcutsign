@@ -456,16 +456,7 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
     neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("MTM"), 12, currentDate);
 
-    /* If 16bit, do short, if 32bit do uint32_t, if more do 64bit */
-    if (plistSize <= UINT16_MAX) {
-        plistSize = (uint16_t)plistSize;
-        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint16_t), plistSize);
-    } else if (plistSize <= UINT32_MAX) {
-        plistSize = (uint32_t)plistSize;
-        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint32_t), plistSize);
-    } else {
-        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(size_t), plistSize);
-    }
+    neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), 0, plistSize);
 
     /* TODO: ADD CTM & MTM fields once neoaa supports it */
     NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
@@ -487,15 +478,14 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     }
     items[0] = itemDir;
     items[1] = itemPlist;
-    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items(items, 2);
-    neo_aa_archive_item_list_destroy(items, 2);
+    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items_nocopy(items, 2);
     if (!archive) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
         return -1;
     }
     size_t aarSize = 0;
     uint8_t *encodedData = neo_aa_archive_plain_get_encoded_data(archive, &aarSize);
-    neo_aa_archive_plain_destroy(archive);
+    neo_aa_archive_plain_destroy_nozero(archive);
     if (!encodedData || !aarSize) {
         fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
         return -1;
@@ -571,16 +561,7 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("CTM"), 12, currentDate);
     neo_aa_header_set_field_timespec(header, NEO_AA_FIELD_C("MTM"), 12, currentDate);
 
-    /* If 16bit, do short, if 32bit do uint32_t, if more do 64bit */
-    if (plistSize <= UINT16_MAX) {
-        plistSize = (uint16_t)plistSize;
-        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint16_t), plistSize);
-    } else if (plistSize <= UINT32_MAX) {
-        plistSize = (uint32_t)plistSize;
-        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(uint32_t), plistSize);
-    } else {
-        neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), sizeof(size_t), plistSize);
-    }
+    neo_aa_header_set_field_blob(header, NEO_AA_FIELD_C("DAT"), 0, plistSize);
 
     /* TODO: ADD CTM & MTM fields once neoaa supports it */
     NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
@@ -602,15 +583,14 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     }
     items[0] = itemDir;
     items[1] = itemPlist;
-    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items(items, 2);
-    neo_aa_archive_item_list_destroy(items, 2);
+    NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items_nocopy(items, 2);
     if (!archive) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
         return 0;
     }
     size_t aarSize = 0;
     uint8_t *aar = neo_aa_archive_plain_get_encoded_data(archive, &aarSize);
-    neo_aa_archive_plain_destroy(archive);
+    neo_aa_archive_plain_destroy_nozero(archive);
     if (!aar || !aarSize) {
         fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
         return 0;
