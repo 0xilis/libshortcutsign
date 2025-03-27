@@ -16,8 +16,8 @@
 #include <libNeoAppleArchive.h>
 #include "res.h"
 
-#define EMBEDDED_SIGNED_DATA_SIZE 98099
-#define EMBEDDED_SIGNED_DATA_ADS 0x57f
+#define EMBEDDED_SIGNED_DATA_SIZE 10589
+#define EMBEDDED_SIGNED_DATA_ADS 0x01
 
 __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
