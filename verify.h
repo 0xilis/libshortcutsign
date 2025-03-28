@@ -8,6 +8,10 @@
 
 #include <inttypes.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int verify_dict_auth_data(uint8_t *authData, size_t authDataSize);
 int __attribute__((deprecated)) verify_contact_signed_auth_data(uint8_t *authData, size_t authDataSize); /* Use verify_dict_auth_data instead */
 int __attribute__((deprecated)) verify_contact_signed_shortcut(const char *signedShortcutPath); /* Use verify_signed_shortcut instead */
@@ -24,5 +28,9 @@ typedef enum {
 
 SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize);
 void print_shortcut_cert_info(uint8_t *buffer, size_t bufferSize);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* libshortcutsign_verify_h */
