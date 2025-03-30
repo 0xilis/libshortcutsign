@@ -31,7 +31,7 @@ __attribute__((visibility ("hidden"))) static uint8_t *load_binary(const char *s
         free(aeaShortcutArchive);
         return 0;
     }
-    if (_binarySize) {
+    if (binarySize) {
         *binarySize = _binarySize;
     }
     return aeaShortcutArchive;
