@@ -317,37 +317,39 @@ int resign_shortcut_prologue(uint8_t *signedShortcut, void *privateKey, size_t p
     return 0;
 }
 
+struct lss_aea_segment_header {
+    uint32_t originalSize;
+    uint32_t compressedSize;
+    /* size: based on rootHeader.checksumAlgorithm
+       0 for checksumAlgorithm 0
+       8 for checksumAlgorithm 1 (Murmur64 Hash)
+       32 for checksumAlgorithm 2 (SHA-256)
+     */
+    uint8_t* hash;
+    uint8_t segmentHMAC[0x20];
+};
+
 int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey) {
     /* TODO: This code is really hard to understand */
+    /* In the future, neo_aea_sign implemented in libNeoAppleArchive, use that */
+
     uint8_t *_signedShortcut = *signedShortcut;
-    size_t compressedSize = archivedDirSize * 2;
-    uint8_t *buffer = malloc(compressedSize);
-    compressedSize = lzfse_encode_buffer(buffer, compressedSize, archivedDir, archivedDirSize, NULL);
-    free(archivedDir);
-    if (!buffer) {
-        fprintf(stderr,"libshortcutsign: failed to compress LZFSE\n");
-        return -1;
-    }
 
     /* Extract authDataSize from signedShortcut */
     size_t authDataSize;
     memcpy(&authDataSize, _signedShortcut + 8, 4);
 
-    /* Fix authDataSize + offsets */
     memcpy(_signedShortcut + authDataSize + 0xec, &archivedDirSize, 4);
-    memcpy(_signedShortcut + authDataSize + 0x13c, &archivedDirSize, 4);
 
     /* Set compressed LZFSE data */
-    _signedShortcut = realloc(_signedShortcut, authDataSize + 0x495c + compressedSize);
+    size_t signedShortcutMallocSize = authDataSize + 0x495c + archivedDirSize;
+    _signedShortcut = realloc(_signedShortcut, signedShortcutMallocSize);
     if (!_signedShortcut) {
         fprintf(stderr,"libshortcutsign: could not realloc signedShortcut\n");
         return -1;
     }
     /* Adjust pointer for realloc */
     *signedShortcut = _signedShortcut;
-
-    memcpy(_signedShortcut + authDataSize + 0x495c, buffer, compressedSize);
-    free(buffer);
 
     /* Prepare HKDF context */
     const uint8_t *salt = (uint8_t *)(_signedShortcut + authDataSize + 0xac);
@@ -363,37 +365,76 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         return -1;
     }
 
-    /*
-     * before doing hmac, update the size in prolouge
+    /* 
+     * Currently, signedShortcutMallocSize will be resignedSize
+     * This is because we currently don't implement LZFSE compression
+     * In the future, implement this...
      */
-    memcpy(_signedShortcut + authDataSize + 0x13c + 4, &compressedSize, 4);
-    size_t resignedShortcutSize = authDataSize + 0x495c + compressedSize;
+    size_t resignedShortcutSize = signedShortcutMallocSize;
     memcpy(_signedShortcut + authDataSize + 0xec + 8, &resignedShortcutSize, 4);
 
     /* Derive AEA_CK/AEA_SK keys using HKDF */
-    void *aea_ck_ctx = malloc(10);
+    uint8_t aea_ck_ctx[10];
     memcpy(aea_ck_ctx, "AEA_CK", 6);
     memset((char *)aea_ck_ctx + 6, 0, 4);
     uint8_t *aea_ck = do_hkdf(aea_ck_ctx, 10, derivedKey);
-    void *aea_sk_ctx = malloc(10);
+    uint8_t aea_sk_ctx[10];
     memcpy(aea_sk_ctx, "AEA_SK", 6);
     memset((char *)aea_sk_ctx + 6, 0, 4);
     uint8_t *aea_sk = do_hkdf(aea_sk_ctx, 10, aea_ck);
-    free(aea_ck_ctx);
-    free(aea_sk_ctx);
 
-    /* HMAC derivation for AEA_CK, AEA_SK */
-    uint8_t *hmac = hmac_derive(aea_sk, _signedShortcut + authDataSize + 0x495c, compressedSize, 0, 0);
+    uint8_t *hmac;
 
-    /* Replace old hmac in binary data */
-    memcpy(_signedShortcut + authDataSize + 0x295c, hmac, 32);
-    free(hmac);
+    int nSegment = 0;
+    size_t sizeLeft = archivedDirSize;
+    size_t maxSegmentSize = (size_t) *(uint32_t *)(_signedShortcut + authDataSize + 0xec + 16);
+    uint8_t *segmentData = _signedShortcut + authDataSize + 0x495c;
+    size_t mallocSizeLeft = archivedDirSize;
+    uint8_t *originalFileSegment = archivedDir;
+    struct lss_aea_segment_header *segmentHeader = (void *)(_signedShortcut + authDataSize + 0x13c);
+    uint8_t *segmentHMAC = _signedShortcut + authDataSize + 0x295c;
+    while (sizeLeft) {
+        size_t segmentSize = maxSegmentSize;
+        if (segmentSize > sizeLeft) {
+            segmentSize = sizeLeft;
+        }
+        /*
+         * TODO:
+         *
+         * Dealing with compression in multi-segment AEA is hard
+         * For right now, I'm just going to have all segments uncompressed
+         * When I do a full fledged neo_aea_sign, flesh it out later
+         */
+        if (mallocSizeLeft < sizeLeft) {
+            fprintf(stderr,"libshortcutsign: mallocSizeLeft is under sizeLeft\n");
+            return -1;
+        }
+        memcpy(segmentData, originalFileSegment, segmentSize);
+        segmentHeader->originalSize = segmentSize;
+        segmentHeader->compressedSize = segmentSize;
+        
+        /* HMAC derivation for AEA_CK, AEA_SK */
+        hmac = hmac_derive(aea_sk, segmentData, segmentSize, 0, 0);
+
+        /* Replace old hmac in binary data */
+        memcpy(segmentHMAC, hmac, 32);
+        free(hmac);
+
+        nSegment++;
+        sizeLeft -= segmentSize;
+        segmentData += segmentSize;
+        mallocSizeLeft -= segmentSize;
+        originalFileSegment += segmentSize;
+        segmentHeader += 40;
+        segmentHMAC += 32;
+    }
+    free(archivedDir);
     free(aea_sk);
 
     /* Re-hmac for AEA_CHEK */
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
-    /* TODO: This discloses memory into the resigned shortcut, but it still works?? */
-    hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, 0x2800, _signedShortcut + authDataSize + 0x293c, 0x2020);
+    /* data1 is the segment headers in cluster 0 */
+    hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, 0x2800, _signedShortcut + authDataSize + 0x293c, 32);
     memcpy(_signedShortcut + authDataSize + 0x11c, hmac, 32);
     free(hmac);
 
@@ -415,7 +456,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     }
 
     if (newSize) {
-        *newSize = (authDataSize + 0x495c + compressedSize);
+        *newSize = resignedShortcutSize;
     }
 
     return 0;
