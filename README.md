@@ -18,14 +18,12 @@ Statically provided as submodules:
 
 libshortcutsign is cross platform and works on Linux and macOS. iOS and FreeBSD are also supported but be aware the Makefile does not build for these platforms. A Windows version is planned, although be aware this may not be for a while. Android is not being considered at this time.
 
-Do be aware however that verify_ functions are not yet complete: CMS AppleIDValidationRecord checking is currently not implemented, meaning it is possible for someone to change the phone number hash / email hash associated with a contact signed shortcut. libNeoAppleArchive prologue checking is also not implemented in yet. These will be implemented in the future.
+Do be aware however that verify_ functions are not yet complete: CMS AppleIDValidationRecord checking is currently not implemented, meaning it is possible for someone to change the phone number hash / email hash associated with a contact signed shortcut. This will be implemented in the future.
 
 # Signing
 libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file.
 
-libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/seemoo-lab/airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) ) contact sign a shortcut.
-
-Be aware you'll need to construct the auth data yourself; you can try extracting the auth data from another contact signed shortcut (ex using libshortcutsign's own `auth_data_from_shortcut`) to get a better understanding. You can also try [libqmc](https://github.com/0xilis/QuickMergeHelper/tree/main/QuickMerge%20Helper/libqmc) to use the auth data from a qmc file.
+libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/0xilis/appleid-key-dumper) ) contact sign a shortcut.
 
 # CLI tool
 
@@ -42,8 +40,7 @@ Contributions are welcome! Not just to the code, but also better documentation w
 # TODO
 
 * Once libNeoAppleArchive neo_aea_archive_sign function is implemented, implement it in libshortcutsign
-* Support iCloud signed verification
-* function to get iCloud ID of iCloud signed shortcuts
+* Function to get iCloud ID of iCloud signed shortcuts
 * Improve Documentation
 * Support MinGW for Windows
 
