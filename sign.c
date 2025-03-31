@@ -341,8 +341,14 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
 
     memcpy(_signedShortcut + authDataSize + 0xec, &archivedDirSize, 4);
 
+    uint32_t segmentsPerCluster;
+    memcpy(&segmentsPerCluster, _signedShortcut + authDataSize + 0xec + 20, 4);
+
+    size_t clusterSegmentHeadersSize = segmentsPerCluster * 40;
+    size_t clusterHmacsSize = (segmentsPerCluster * 32) + 32;
+
     /* Set compressed LZFSE data */
-    size_t signedShortcutMallocSize = authDataSize + 0x495c + archivedDirSize;
+    size_t signedShortcutMallocSize = authDataSize + 0x13c + clusterSegmentHeadersSize + clusterHmacsSize + archivedDirSize;
     _signedShortcut = realloc(_signedShortcut, signedShortcutMallocSize);
     if (!_signedShortcut) {
         fprintf(stderr,"libshortcutsign: could not realloc signedShortcut\n");
@@ -353,10 +359,10 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
 
     /* Prepare HKDF context */
     const uint8_t *salt = (uint8_t *)(_signedShortcut + authDataSize + 0xac);
-    const uint8_t *keyDerivationKey = (uint8_t *)(_signedShortcut + authDataSize + 0x8c); // 32-byte key
+    const uint8_t *keyDerivationKey = (uint8_t *)(_signedShortcut + authDataSize + 0x8c);
     uint8_t context[0x4c] = {0};
     memcpy(context, "AEA_AMK", 7);
-    memcpy(context + 11, privateKey, 0x41); // Copy public part of private key
+    memcpy(context + 11, privateKey, 0x41); /* Copy public part of private key */
 
     /* Derive key using OpenSSL HKDF */
     uint8_t derivedKey[32];
@@ -385,14 +391,13 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
 
     uint8_t *hmac;
 
-    int nSegment = 0;
     size_t sizeLeft = archivedDirSize;
     size_t maxSegmentSize = (size_t) *(uint32_t *)(_signedShortcut + authDataSize + 0xec + 16);
-    uint8_t *segmentData = _signedShortcut + authDataSize + 0x495c;
+    uint8_t *segmentData = _signedShortcut + authDataSize + 0x13c + clusterSegmentHeadersSize + clusterHmacsSize;
     size_t mallocSizeLeft = archivedDirSize;
     uint8_t *originalFileSegment = archivedDir;
     struct lss_aea_segment_header *segmentHeader = (void *)(_signedShortcut + authDataSize + 0x13c);
-    uint8_t *segmentHMAC = _signedShortcut + authDataSize + 0x295c;
+    uint8_t *segmentHMAC = _signedShortcut + authDataSize + 0x13c + clusterSegmentHeadersSize + 32;
     while (sizeLeft) {
         size_t segmentSize = maxSegmentSize;
         if (segmentSize > sizeLeft) {
@@ -420,7 +425,6 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         memcpy(segmentHMAC, hmac, 32);
         free(hmac);
 
-        nSegment++;
         sizeLeft -= segmentSize;
         segmentData += segmentSize;
         mallocSizeLeft -= segmentSize;
@@ -435,7 +439,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
     /* data1 is the segment headers in cluster 0 */
     /* This leaks process memory, but it works ??? */
-    hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, 0x2800, _signedShortcut + authDataSize + 0x293c, 0x2020);
+    hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, clusterSegmentHeadersSize, _signedShortcut + authDataSize + 0x13c + clusterSegmentHeadersSize, clusterHmacsSize);
     memcpy(_signedShortcut + authDataSize + 0x11c, hmac, 32);
     free(hmac);
 
