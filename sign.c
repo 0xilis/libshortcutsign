@@ -434,7 +434,8 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     /* Re-hmac for AEA_CHEK */
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
     /* data1 is the segment headers in cluster 0 */
-    hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, 0x2800, _signedShortcut + authDataSize + 0x293c, 32);
+    /* This leaks process memory, but it works ??? */
+    hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, 0x2800, _signedShortcut + authDataSize + 0x293c, 0x2020);
     memcpy(_signedShortcut + authDataSize + 0x11c, hmac, 32);
     free(hmac);
 
