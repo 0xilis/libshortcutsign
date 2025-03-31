@@ -384,13 +384,10 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     memcpy(aea_ck_ctx, "AEA_CK", 6);
     memset((char *)aea_ck_ctx + 6, 0, 4);
     uint8_t *aea_ck = do_hkdf(aea_ck_ctx, 10, derivedKey);
-    uint8_t aea_sk_ctx[10];
-    memcpy(aea_sk_ctx, "AEA_SK", 6);
-    memset((char *)aea_sk_ctx + 6, 0, 4);
-    uint8_t *aea_sk = do_hkdf(aea_sk_ctx, 10, aea_ck);
 
     uint8_t *hmac;
 
+    int nSegments = 0;
     size_t sizeLeft = archivedDirSize;
     size_t maxSegmentSize = (size_t) *(uint32_t *)(_signedShortcut + authDataSize + 0xec + 16);
     uint8_t *segmentData = _signedShortcut + authDataSize + 0x13c + clusterSegmentHeadersSize + clusterHmacsSize;
@@ -417,14 +414,21 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         memcpy(segmentData, originalFileSegment, segmentSize);
         segmentHeader->originalSize = segmentSize;
         segmentHeader->compressedSize = segmentSize;
+
+        uint8_t aea_sk_ctx[10];
+        memcpy(aea_sk_ctx, "AEA_SK", 6);
+        *(int *)&aea_sk_ctx[6] = nSegments;
+        uint8_t *aea_sk = do_hkdf(aea_sk_ctx, 10, aea_ck);
         
-        /* HMAC derivation for AEA_CK, AEA_SK */
+        /* HMAC derivation for AEA_SK */
         hmac = hmac_derive(aea_sk, segmentData, segmentSize, 0, 0);
 
         /* Replace old hmac in binary data */
         memcpy(segmentHMAC, hmac, 32);
         free(hmac);
+        free(aea_sk);
 
+        nSegments++;
         sizeLeft -= segmentSize;
         segmentData += segmentSize;
         mallocSizeLeft -= segmentSize;
@@ -433,7 +437,6 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         segmentHMAC += 32;
     }
     free(archivedDir);
-    free(aea_sk);
 
     /* Re-hmac for AEA_CHEK */
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
