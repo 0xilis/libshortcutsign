@@ -22,51 +22,35 @@
 
 /* Function to convert EVP_PKEY to X9.63 encoded ECDSA-P256 public key */
 __attribute__((visibility ("hidden"))) int convert_evp_pkey_to_x963(EVP_PKEY *pkey, uint8_t *out, size_t *out_len) {
-    /* TODO: THIS FUNCTION IS CURRENTLY NOT YET FUNCTIONAL */
-    if (!pkey || !out || !out_len) {
-        fprintf(stderr, "Invalid input parameters\n");
+    BIGNUM *x = NULL, *y = NULL;
+    int rc = -1;
+    
+    if (!pkey || !out || !out_len || *out_len < 65) {
         return -1;
     }
 
-    /* Check if the key is an EC key */
-    if (EVP_PKEY_get_id(pkey) != EVP_PKEY_EC) {
-        fprintf(stderr, "Key is not an EC key\n");
-        return -1;
+    /* Get X and Y coordinates */
+    if (EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_EC_PUB_X, &x) != 1 ||
+        EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_EC_PUB_Y, &y) != 1) {
+        goto cleanup;
     }
 
-    /* Create a context for key parameter extraction */
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_pkey(NULL, pkey, NULL);
-    if (!ctx) {
-        fprintf(stderr, "Failed to create EVP_PKEY_CTX\n");
-        return -1;
+    /* Verify P-256 size */
+    if (BN_num_bytes(x) != 32 || BN_num_bytes(y) != 32) {
+        goto cleanup;
     }
 
-    /* Get the public key in X9.63 format */
-    size_t required_len = 65; // P-256 uncompressed public key is 65 bytes
-    if (*out_len < required_len) {
-        fprintf(stderr, "Output buffer is too small (need %zu bytes)\n", required_len);
-        EVP_PKEY_CTX_free(ctx);
-        return -1;
-    }
+    /* Format as uncompressed X9.63 */
+    out[0] = 0x04;  // Uncompressed marker
+    BN_bn2binpad(x, out + 1, 32);
+    BN_bn2binpad(y, out + 33, 32);
+    *out_len = 65;
+    rc = 0;
 
-    /* Use OSSL_PARAM to retrieve the public key in uncompressed format */
-    OSSL_PARAM params[] = {
-        OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY, out, required_len),
-        OSSL_PARAM_END
-    };
-
-    if (EVP_PKEY_get_params(pkey, params) <= 0) {
-        fprintf(stderr, "Failed to retrieve public key parameters\n");
-        EVP_PKEY_CTX_free(ctx);
-        return -1;
-    }
-
-    *out_len = required_len;
-
-    /* Clean up */
-    EVP_PKEY_CTX_free(ctx);
-
-    return 0; /* Success */
+cleanup:
+    BN_free(x);
+    BN_free(y);
+    return rc;
 }
 
 void print_certificate_info(X509 *cert) {
@@ -543,7 +527,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
             return -1;
         }
         size_t signingPublicKeySize = 65;
-        signingPublicKey = malloc(signingPublicKeySize);
+        signingPublicKey = malloc(signingPublicKeySize * 2); /* allocate extra space just in case we grow in size */
         convert_evp_pkey_to_x963(rootCertPublicKey, signingPublicKey, &signingPublicKeySize);
         EVP_PKEY_free(rootCertPublicKey);
     } else {
