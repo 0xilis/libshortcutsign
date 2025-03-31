@@ -7,6 +7,7 @@
 #define libshortcutsign_extract_h
 
 #include <inttypes.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

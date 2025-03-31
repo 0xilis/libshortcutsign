@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include "extract.h"
 #include <libNeoAppleArchive.h>
-#include <lzfse.h>
 
 /* 
  * auth_data_from_shortcut

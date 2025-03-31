@@ -12,7 +12,10 @@
 #include <openssl/ec.h>
 #include <openssl/kdf.h>
 #include <openssl/param_build.h>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wstrict-prototypes"
 #include <lzfse.h>
+#pragma clang diagnostic pop
 #include <libNeoAppleArchive.h>
 #include "res.h"
 

@@ -15,6 +15,7 @@
 #include <plist/plist.h>
 #include <openssl/err.h>
 #include <inttypes.h>
+#include <stddef.h>
 #include "extract.h"
 #include "verify.h"
 #include "res.h"
@@ -502,7 +503,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 0) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 1) != 0) {
         free(authData);
         return -1;
     }
