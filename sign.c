@@ -374,14 +374,6 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         return -1;
     }
 
-    /* 
-     * Currently, signedShortcutMallocSize will be resignedSize
-     * This is because we currently don't implement LZFSE compression
-     * In the future, implement this...
-     */
-    size_t resignedShortcutSize = signedShortcutMallocSize;
-    memcpy(_signedShortcut + authDataSize + 0xec + 8, &resignedShortcutSize, 4);
-
     /* Derive AEA_CK/AEA_SK keys using HKDF */
     uint8_t aea_ck_ctx[10];
     memcpy(aea_ck_ctx, "AEA_CK", 6);
@@ -391,9 +383,10 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     uint8_t *hmac;
 
     int nSegments = 0;
+    size_t resignedShortcutSize = authDataSize + 0x13c + clusterSegmentHeadersSize + clusterHmacsSize;
     size_t sizeLeft = archivedDirSize;
     size_t maxSegmentSize = (size_t) *(uint32_t *)(_signedShortcut + authDataSize + 0xec + 16);
-    uint8_t *segmentData = _signedShortcut + authDataSize + 0x13c + clusterSegmentHeadersSize + clusterHmacsSize;
+    uint8_t *segmentData = _signedShortcut + resignedShortcutSize;
     size_t mallocSizeLeft = archivedDirSize;
     uint8_t *originalFileSegment = archivedDir;
     struct lss_aea_segment_header *segmentHeader = (void *)(_signedShortcut + authDataSize + 0x13c);
@@ -414,9 +407,14 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
             fprintf(stderr,"libshortcutsign: mallocSizeLeft is under sizeLeft\n");
             return -1;
         }
-        memcpy(segmentData, originalFileSegment, segmentSize);
+        size_t compressedSize = lzfse_encode_buffer(segmentData, segmentSize, originalFileSegment, segmentSize, 0);
+        if (compressedSize >= segmentSize || compressedSize == 0) {
+            /* Do an uncompressed segment if lzfse made us bigger, or lzfse failed */
+            compressedSize = segmentSize;
+            memcpy(segmentData, originalFileSegment, segmentSize);
+        }
         segmentHeader->originalSize = segmentSize;
-        segmentHeader->compressedSize = segmentSize;
+        segmentHeader->compressedSize = compressedSize;
 
         uint8_t aea_sk_ctx[10];
         memcpy(aea_sk_ctx, "AEA_SK", 6);
@@ -424,7 +422,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         uint8_t *aea_sk = do_hkdf(aea_sk_ctx, 10, aea_ck);
         
         /* HMAC derivation for AEA_SK */
-        hmac = hmac_derive(aea_sk, segmentData, segmentSize, 0, 0);
+        hmac = hmac_derive(aea_sk, segmentData, compressedSize, 0, 0);
 
         /* Replace old hmac in binary data */
         memcpy(segmentHMAC, hmac, 32);
@@ -433,13 +431,21 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
 
         nSegments++;
         sizeLeft -= segmentSize;
-        segmentData += segmentSize;
-        mallocSizeLeft -= segmentSize;
+        segmentData += compressedSize;
+        mallocSizeLeft -= compressedSize;
         originalFileSegment += segmentSize;
         segmentHeader += 40;
         segmentHMAC += 32;
+        resignedShortcutSize += compressedSize;
     }
     free(archivedDir);
+
+    /* 
+     * Currently, signedShortcutMallocSize will be resignedSize
+     * This is because we currently don't implement LZFSE compression
+     * In the future, implement this...
+     */
+    memcpy(_signedShortcut + authDataSize + 0xec + 8, &resignedShortcutSize, 4);
 
     /* Re-hmac for AEA_CHEK */
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
