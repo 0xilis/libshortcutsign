@@ -556,12 +556,12 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
         return -1;
     }
 
-    NeoAEAArchive aea = neo_aea_archive_with_encoded_data_nocopy(buffer, bufferSize);
+    NeoAEAArchive aea = neo_aea_with_encoded_data_nocopy(buffer, bufferSize);
     if (!aea) {
         fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
         return -1;
     }
-    int isVerified = neo_aea_archive_verify(aea, signingPublicKey);
+    int isVerified = neo_aea_verify(aea, signingPublicKey);
 
     /* Free the allocated memory */
     size_t i;
@@ -572,7 +572,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     free(certSizesList);
     free(authData);
 
-    neo_aea_archive_destroy(aea);
+    neo_aea_destroy(aea);
     return isVerified;
 }
 
