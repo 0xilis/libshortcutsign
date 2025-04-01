@@ -15,3 +15,4 @@ _verify_contact_signed_shortcut
 _verify_signed_shortcut
 _verify_signed_shortcut_buffer
 _get_shortcut_format
+_print_shortcut_cert_info
