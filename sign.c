@@ -497,14 +497,14 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     NeoAAArchiveItem itemDir = neo_aa_archive_item_create_with_header(header);
     if (!itemDir) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
-        neo_aa_header_destroy(header);
+        neo_aa_header_destroy_nozero(header);
         return -1;
     }
     /* Create a new header for the Shortcut.wflow file */
     header = neo_aa_header_create();
     if (!header) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
-        neo_aa_archive_item_destroy(itemDir);
+        neo_aa_archive_item_destroy_nozero(itemDir);
         return -1;
     }
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
@@ -520,22 +520,14 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
     if (!itemPlist) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
-        neo_aa_header_destroy(header);
-        neo_aa_archive_item_destroy(itemDir);
+        neo_aa_header_destroy_nozero(header);
+        neo_aa_archive_item_destroy_nozero(itemDir);
         return -1;
     }
     /* Add plist blob data */
     neo_aa_archive_item_add_blob_data(itemPlist, plist, plistSize);
     
-    NeoAAArchiveItem *items = malloc(sizeof(NeoAAArchiveItem) * 2);
-    if (!items) {
-        fprintf(stderr,"libshortcutsign: out of memory\n");
-        neo_aa_archive_item_destroy(itemPlist);
-        neo_aa_archive_item_destroy(itemDir);
-        return -1;
-    }
-    items[0] = itemDir;
-    items[1] = itemPlist;
+    NeoAAArchiveItem items[2] = {itemDir, itemPlist};
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items_nocopy(items, 2);
     if (!archive) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
@@ -543,7 +535,9 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     }
     size_t aarSize = 0;
     uint8_t *encodedData = neo_aa_archive_plain_get_encoded_data(archive, &aarSize);
-    neo_aa_archive_plain_destroy_nozero(archive);
+    neo_aa_archive_item_destroy_nozero(itemDir);
+    neo_aa_archive_item_destroy_nozero(itemPlist);
+    free(archive);
     if (!encodedData || !aarSize) {
         fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
         return -1;
@@ -602,14 +596,14 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     NeoAAArchiveItem itemDir = neo_aa_archive_item_create_with_header(header);
     if (!itemDir) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
-        neo_aa_header_destroy(header);
+        neo_aa_header_destroy_nozero(header);
         return 0;
     }
     /* Create a new header for the Shortcut.wflow file */
     header = neo_aa_header_create();
     if (!header) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
-        neo_aa_archive_item_destroy(itemDir);
+        neo_aa_archive_item_destroy_nozero(itemDir);
         return 0;
     }
     neo_aa_header_set_field_uint(header, NEO_AA_FIELD_C("TYP"), 1, 'F');
@@ -625,22 +619,14 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     NeoAAArchiveItem itemPlist = neo_aa_archive_item_create_with_header(header);
     if (!itemPlist) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
-        neo_aa_header_destroy(header);
-        neo_aa_archive_item_destroy(itemDir);
+        neo_aa_header_destroy_nozero(header);
+        neo_aa_archive_item_destroy_nozero(itemDir);
         return 0;
     }
     /* Add plist blob data */
     neo_aa_archive_item_add_blob_data(itemPlist, plist, plistSize);
     
-    NeoAAArchiveItem *items = malloc(sizeof(NeoAAArchiveItem) * 2);
-    if (!items) {
-        fprintf(stderr,"libshortcutsign: out of memory\n");
-        neo_aa_archive_item_destroy(itemPlist);
-        neo_aa_archive_item_destroy(itemDir);
-        return 0;
-    }
-    items[0] = itemDir;
-    items[1] = itemPlist;
+    NeoAAArchiveItem items[2] = {itemDir, itemPlist};
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items_nocopy(items, 2);
     if (!archive) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
@@ -648,7 +634,9 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     }
     size_t aarSize = 0;
     uint8_t *aar = neo_aa_archive_plain_get_encoded_data(archive, &aarSize);
-    neo_aa_archive_plain_destroy_nozero(archive);
+    neo_aa_archive_item_destroy_nozero(itemDir);
+    neo_aa_archive_item_destroy_nozero(itemPlist);
+    free(archive);
     if (!aar || !aarSize) {
         fprintf(stderr,"libshortcutsign: failed to get encoded aar data\n");
         return 0;
