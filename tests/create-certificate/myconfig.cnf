@@ -1,0 +1,20 @@
+[ req ]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+default_bits = 2048
+
+[ req_distinguished_name ]
+C = US
+ST = Snooltopia
+L = Snoolcity
+O = Snoolie Inc
+CN = shortcut-sign Test Root Certificate
+emailAddress = QuickUpdateShortcutSupport@protonmail.com
+
+[ v3_req ]
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+1.2.840.113635.100.18.1 = ASN1:UTF8String:SnoolieCert

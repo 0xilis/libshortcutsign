@@ -97,6 +97,30 @@ int main(void) {
         return -1;
     }
     /* In the future, program extract_signed_shortcut tests, and check hash to ensure match */
+    size_t unsignedShortcutSize;
+    uint8_t *unsignedShortcut = extract_signed_shortcut_buffer(shortcut, shortcutSize, &unsignedShortcutSize);
+    if (!unsignedShortcut) {
+        fprintf(stderr,"iCloudVerificationTest.shortcut failed extract_signed_shortcut_buffer\n");
+        return -1;
+    }
+    privateKey = load_binary("shortcut-sign-test-private.dat", &keySize);
+    if (!privateKey) {
+        fprintf(stderr,"shortcut-sign-test-private.dat could not be loaded\n");
+        return -1;
+    }
+    authData = load_binary("selfSignedAuthData.plist", &authDataSize);
+    if (!authData) {
+        fprintf(stderr,"selfSignedAuthData.plist could not be loaded\n");
+        return -1;
+    }
+    uint8_t *newlySignedShortcut = sign_shortcut_with_private_key_and_auth_data(unsignedShortcut, unsignedShortcutSize, privateKey, authData, authDataSize, 0);
+    if (!newlySignedShortcut) {
+        fprintf(stderr,"failed sign_shortcut_with_private_key_and_auth_data test\n");
+        return -1;
+    }
+    free(authData);
+    free(unsignedShortcut);
+    free(privateKey);
     printf("Tests successful\n");
     return 0;
 }

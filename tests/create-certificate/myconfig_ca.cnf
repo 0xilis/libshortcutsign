@@ -1,0 +1,20 @@
+[ req ]
+distinguished_name = req_distinguished_name
+req_extensions = v3_ca  # Changed from v3_req to v3_ca for CA certs
+prompt = no
+
+[ req_distinguished_name ]
+C = US
+ST = Snooltopia
+L = Snoolcity
+O = Snoolie Inc
+CN = shortcut-sign Test Certificate Authority
+emailAddress = QuickUpdateShortcutSupport@protonmail.com
+
+[ v3_ca ]  # Changed from v3_req to v3_ca
+basicConstraints = critical,CA:TRUE,pathlen:0
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+keyUsage = critical,digitalSignature,keyCertSign,cRLSign
+extendedKeyUsage = serverAuth,clientAuth
+1.2.840.113635.100.18.1 = ASN1:UTF8String:SnoolieCert
