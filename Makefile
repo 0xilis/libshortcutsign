@@ -14,6 +14,12 @@ OS := $(shell uname)
 
 VERSION_SCRIPT = EXPORTS
 
+DEBUG ?= 0
+
+ifeq ($(DEBUG), 1)
+  CFLAGS += -g -fsanitize=address
+endif
+
 output: $(buildDir)
 	@ # Build liblzfse submodule
 	@echo "building liblzfse..."

@@ -7,7 +7,7 @@ LIBSHORTCUTSIGN_DIR = ../
 output: $(buildDir)
 	@ # Build libshortcutsign
 	@echo "building libshortcutsign..."
-	$(MAKE) -C $(LIBSHORTCUTSIGN_DIR)
+	$(MAKE) -C $(LIBSHORTCUTSIGN_DIR) -DDEBUG=1
 
 	@ # Build tests
 	@echo "building tests..."
