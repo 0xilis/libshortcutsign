@@ -360,6 +360,20 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     /* Adjust pointer for realloc */
     *signedShortcut = _signedShortcut;
 
+    /* 
+     * Create a new random HKDF / HMAC key using RNG
+     * This key will be used to base other HKDF / HMAC
+     * keys off of.
+     *
+     * TODO: Implement a better solution than srand(time(NULL));
+     * This may not be secure enough if someone knows the date.
+     */
+    srand(time(NULL));
+    uint8_t *randomKey = (uint8_t *)(_signedShortcut + authDataSize + 0x8c);
+    for (int i = 0; i < 32; i++) {
+        randomKey[i] = rand() & 0xFF;
+    }
+
     /* Prepare HKDF context */
     const uint8_t *salt = (uint8_t *)(_signedShortcut + authDataSize + 0xac);
     const uint8_t *keyDerivationKey = (uint8_t *)(_signedShortcut + authDataSize + 0x8c);

@@ -61,3 +61,5 @@ Temporary Items
 /tests/ignore/
 .theos/
 packages/
+/tests/create-certificate/
+/tests/newSigned.shortcut
