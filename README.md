@@ -23,7 +23,7 @@ Do be aware however that verify_ functions are not yet complete: CMS AppleIDVali
 # Signing
 libshortcutsign has a function, `sign_shortcut_with_private_key_and_auth_data`, for signing an unsigned shortcut file.
 
-libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/0xilis/appleid-key-dumper](https://github.com/0xilis/appleid-key-dumper) contact sign a shortcut.
+libshortcutsign allows you to (assuming you have already managed to extract your Apple ID Validation Record certificates; you may want to use [https://github.com/0xilis/appleid-key-dumper](https://github.com/0xilis/appleid-key-dumper)) contact sign a shortcut.
 
 # CLI tool
 
