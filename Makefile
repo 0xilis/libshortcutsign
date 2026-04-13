@@ -1,6 +1,6 @@
 buildDir = build/obj
 CC = clang
-CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/
+CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/ -I/opt/homebrew/opt/openssl@3/include -I/opt/homebrew/opt/libplist/include
 
 # Paths for lzfse
 LZFSE_DIR = libs/lzfse
@@ -42,7 +42,7 @@ output: $(buildDir)
 
 	@# Create shared library and use version script
 	@if [ "$(OS)" = "Darwin" ]; then\
-		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o -Lbuild/lzfse/lib -Llibs/libNeoAppleArchive/build/libzbitmap/lib -Llibs/libNeoAppleArchive/build/usr/lib -lNeoAppleArchive -lzbitmap -llzfse -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o -Lbuild/lzfse/lib -Llibs/libNeoAppleArchive/build/libzbitmap/lib -Llibs/libNeoAppleArchive/build/usr/lib -lNeoAppleArchive -lzbitmap -llzfse -lz -lssl -lcrypto -lplist-2.0 -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/opt/libplist/lib $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
 	else\
 		$(CC) -shared -o build/usr/lib/libshortcutsign.so build/obj/*.o -Lbuild/lzfse/lib -Llibs/libNeoAppleArchive/build/libzbitmap/lib -Llibs/libNeoAppleArchive/build/usr/lib -lNeoAppleArchive -lzbitmap -llzfse -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS);\
 	fi

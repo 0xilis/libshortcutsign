@@ -39,6 +39,10 @@ Contributions are welcome! Not just to the code, but also better documentation w
 
 # TODO
 
+* Support more formats of private keys and public keys
+* Add a CommonCrypto option for sign.c and verify.c to allow macOS to use without installing OpenSSL
+* Option to auto-update
+* JavaScript implementation
 * Once libNeoAppleArchive neo_aea_archive_sign function is implemented, implement it in libshortcutsign
 * Function to get iCloud ID of iCloud signed shortcuts
 * Improve Documentation
