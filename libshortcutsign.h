@@ -1,8 +1,6 @@
 /*
  * Snoolie K, (c) 2024.
- * library for contact signing shortcuts with no WorkflowKit
- * (Albeit, still requires libAppleArchive)
- * Based on my research on reversing WorkflowKit.
+ * library for signed shortcuts on Unix systems (OS X, Linux, etc)
 */
 
 #ifndef libshortcutsign_h

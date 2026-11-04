@@ -291,7 +291,7 @@ __attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert
 
 
 /* Function to parse the plist file and extract the AppleIDCertificateChain */
-__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned, int iCloudAllowed) {
+__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned) {
     plist_t plist;
     if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");
@@ -303,12 +303,6 @@ __attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uin
     if (!cert_chain) {
         *iCloudSigned = 1;
         cert_chain = plist_dict_get_item(plist, "SigningCertificateChain");
-        if (!iCloudAllowed) {
-            fprintf(stderr, "iCloud verification not yet supported\n");
-            cert_chain = NULL;
-            plist_free(plist);
-            return -1;
-        }
         if (!cert_chain || plist_get_node_type(cert_chain) != PLIST_ARRAY) {
             fprintf(stderr, "Invalid plist format or missing cert chain\n");
             plist_free(plist);
@@ -344,13 +338,20 @@ __attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uin
 
 /* Function to verify the authenticity of the dictionary (equivalent to verify_dict_auth_data) */
 int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
-    uint8_t **certDataArray;
+    uint8_t **certDataArray = NULL;
     size_t certCount;
-    size_t *certSizesList;
+    size_t *certSizesList = NULL;
     int iCloudSigned;
+    int returnCode = -1;
+
+    uint8_t *signingPublicKeySignature = NULL;
+    uint8_t *signingPublicKey = NULL;
+    EVP_PKEY *rootCertPublicKey = NULL;
+    plist_t plist = NULL;
+    char *validationRecordData = NULL;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 1) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
         return -1;
     }
 
@@ -358,7 +359,7 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
     STACK_OF(X509) *chain = load_certificate_chain(certDataArray, certCount, certSizesList);
     if (!chain) {
         fprintf(stderr, "Error loading certificate chain\n");
-        return -1;
+        goto cleanup_vdad;
     }
 
     /* Verify the certificate chain */
@@ -368,11 +369,11 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         return -1;
     }
 
-    plist_t plist;
     if (!iCloudSigned) {
         /* Parse the plist to extract the SigningPublicKey and SigningPublicKeySignature */
         if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
             fprintf(stderr, "Failed to read plist from file\n");
+            sk_X509_pop_free(chain, X509_free);
             return -1;
         }
 
@@ -381,9 +382,9 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         if (!signingPublicKeyItem || plist_get_node_type(signingPublicKeyItem) != PLIST_DATA) {
             fprintf(stderr, "Missing or invalid SigningPublicKey in plist\n");
             plist_free(plist);
+            sk_X509_pop_free(chain, X509_free);
             return -1;
         }
-        uint8_t *signingPublicKey;
         uint64_t signingPublicKeyLen;
         plist_get_data_val(signingPublicKeyItem, (char **)&signingPublicKey, &signingPublicKeyLen);
 
@@ -391,15 +392,14 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         plist_t signingPublicKeySignatureItem = plist_dict_get_item(plist, "SigningPublicKeySignature");
         if (!signingPublicKeySignatureItem || plist_get_node_type(signingPublicKeySignatureItem) != PLIST_DATA) {
             fprintf(stderr, "Missing or invalid SigningPublicKeySignature in plist\n");
+            sk_X509_pop_free(chain, X509_free);
             plist_free(plist);
             return -1;
         }
-        uint8_t *signingPublicKeySignature;
         uint64_t signingPublicKeySignatureLen;
         plist_get_data_val(signingPublicKeySignatureItem, (char **)&signingPublicKeySignature, &signingPublicKeySignatureLen);
 
         /* Extract the root certificate (first in the chain) and get the EC public key */
-        EVP_PKEY *rootCertPublicKey = NULL;
         const uint8_t *rootCertData = certDataArray[0]; /* Assuming the first cert is the root cert */
         size_t rootCertSize = certCount > 0 ? certSizesList[0] : 0;
 
@@ -407,33 +407,78 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         if (!rootCertPublicKey) {
             fprintf(stderr, "Failed to extract public key from certificate\n");
             plist_free(plist);
+            sk_X509_pop_free(chain, X509_free);
             return -1;
         }
 
         /* Verify the signature using the root certificate's public key */
         if (verify_rsa_signature(signingPublicKey, signingPublicKeyLen, signingPublicKeySignature, signingPublicKeySignatureLen, rootCertPublicKey) != 1) {
             fprintf(stderr, "Failed to verify signature\n");
-            /* EC_KEY_free(rootCertPublicKey); */
             EVP_PKEY_free(rootCertPublicKey);
-            plist_free(plist);
-            return -1;
+            goto cleanup_vdad;
+        }
+
+        /*
+         * TODO:
+         *
+         * shortcut-sign still does not currently
+         * verify the validation record :/
+         * Currently all we do is ensure there is a AppleIDValidationRecord
+         * on the chain with a compatible version, in the future we
+         * want to do CMS blob checking, much like Security.framework
+         * handles it. One note: For shortcuts signing specifically,
+         * validation duration is not checked so we do not need to
+         * implement or worry about this :)
+         */
+        plist_t validationRecordItem = plist_dict_get_item(plist, "AppleIDValidationRecord");
+        if (!validationRecordItem || plist_get_node_type(validationRecordItem) != PLIST_DATA) {
+            fprintf(stderr, "No validation record present\n");
+            if (validationRecordItem) {
+                plist_free(validationRecordItem);
+            }
+            goto cleanup_vdad;
+        }
+
+        uint64_t validationRecordSize = 0;
+
+        plist_get_data_val(validationRecordItem, &validationRecordData, &validationRecordSize);
+
+        if (!validationRecordData || validationRecordSize == 0) {
+            fprintf(stderr, "Empty AppleIDValidationRecord\n");
+            free(validationRecordData);
+            plist_free(validationRecordItem);
+            goto cleanup_vdad;
         }
     }
 
-    /* Free the allocated memory */
-    size_t i;
-    for (i = 0; i < certCount; i++) {
-        free(certDataArray[i]);
+    returnCode = 0; /* success! */
+
+cleanup_vdad:
+
+    free(signingPublicKey);
+    free(signingPublicKeySignature);
+    free(validationRecordData);
+
+    if (chain) {
+        sk_X509_pop_free(chain, X509_free);
     }
-    free(certDataArray);
+
+    /* Free the allocated memory */
+    if (certDataArray) {
+        size_t i;
+        for (i = 0; i < certCount; i++) {
+            free(certDataArray[i]);
+        }
+        free(certDataArray);
+    }
     free(certSizesList);
 
     /* Free the plist structure */
-    if (!iCloudSigned) {
+    if (!iCloudSigned && plist) {
         plist_free(plist);
     }
 
-    return 0; /* If everything is verified successfully */
+    return returnCode;
 }
 
 
@@ -503,7 +548,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 1) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
         free(authData);
         return -1;
     }
@@ -634,7 +679,7 @@ void print_shortcut_cert_info(uint8_t *buffer, size_t bufferSize) {
     int iCloudSigned;
 
     /* Parse the plist and extract the certificate chain */
-    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned, 1) != 0) {
+    if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
         free(authData);
         return;
     }
