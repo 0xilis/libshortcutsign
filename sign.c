@@ -24,17 +24,24 @@
 
 __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
+    if (!hmac) {
+        fprintf(stderr,"hmac_derive failed due to out-of-memory\n");
+        return NULL;
+    }
     OSSL_PARAM params[4];
 
     EVP_MAC *mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
     if (!mac) {
         fprintf(stderr, "Failed to fetch EVP MAC\n");
+        free(hmac);
         return NULL;
     }
 
     EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(mac);
     if (!ctx) {
         fprintf(stderr, "Failed to create EVP MAC context\n");
+        EVP_MAC_free(mac);
+        free(hmac);
         return NULL;
     }
     
@@ -46,6 +53,7 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
         fprintf(stderr, "Failed to initialize EVP MAC\n");
         EVP_MAC_CTX_free(ctx);
         EVP_MAC_free(mac);
+        free(hmac);
         return NULL;
     }
 
@@ -55,6 +63,7 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
             fprintf(stderr, "Failed to update HMAC\n");
             EVP_MAC_CTX_free(ctx);
             EVP_MAC_free(mac);
+            free(hmac);
             return NULL;
         }
     }
@@ -63,6 +72,7 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
             fprintf(stderr, "Failed to update HMAC\n");
             EVP_MAC_CTX_free(ctx);
             EVP_MAC_free(mac);
+            free(hmac);
             return NULL;
         }
     }
@@ -70,6 +80,7 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
         fprintf(stderr, "Failed to update HMAC\n");
         EVP_MAC_CTX_free(ctx);
         EVP_MAC_free(mac);
+        free(hmac);
         return NULL;
     }
 
@@ -79,6 +90,7 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
         fprintf(stderr, "Failed to finalize HMAC\n");
         EVP_MAC_CTX_free(ctx);
         EVP_MAC_free(mac);
+        free(hmac);
         return NULL;
     }
     EVP_MAC_CTX_free(ctx);
@@ -94,11 +106,13 @@ __attribute__((visibility ("hidden"))) static void *do_hkdf(void *context, size_
     }
     EVP_KDF* kdf;
     if ((kdf = EVP_KDF_fetch(NULL, "hkdf", NULL)) == NULL) {
+        free(derivedKey);
         return NULL;
     }
     EVP_KDF_CTX* ctx = EVP_KDF_CTX_new(kdf);
     EVP_KDF_free(kdf);
     if (ctx == NULL) {
+        free(derivedKey);
         return NULL;
     }
     OSSL_PARAM params[4] = {
@@ -108,9 +122,13 @@ __attribute__((visibility ("hidden"))) static void *do_hkdf(void *context, size_
         OSSL_PARAM_construct_end()
     };
     if (EVP_KDF_CTX_set_params(ctx, params) <= 0) {
+        EVP_KDF_CTX_free(ctx);
+        free(derivedKey);
         return NULL;
     }
     if (EVP_KDF_derive(ctx, derivedKey, 32, NULL) <= 0) {
+        EVP_KDF_CTX_free(ctx);
+        free(derivedKey);
         return NULL;
     }
     EVP_KDF_CTX_free(ctx);
@@ -419,6 +437,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
          */
         if (mallocSizeLeft < sizeLeft) {
             fprintf(stderr,"libshortcutsign: mallocSizeLeft is under sizeLeft\n");
+            free(aea_ck);
             return -1;
         }
         size_t compressedSize = lzfse_encode_buffer(segmentData, segmentSize, originalFileSegment, segmentSize, 0);
@@ -463,9 +482,11 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
 
     /* Re-hmac for AEA_CHEK */
     uint8_t *aea_chek = do_hkdf("AEA_CHEK", 8, aea_ck);
+    free(aea_ck);
     /* data1 is the segment headers in cluster 0 */
     /* This leaks process memory, but it works ??? */
     hmac = hmac_derive(aea_chek, _signedShortcut + authDataSize + 0x13c, clusterSegmentHeadersSize, _signedShortcut + authDataSize + 0x13c + clusterSegmentHeadersSize, clusterHmacsSize);
+    free(aea_chek);
     memcpy(_signedShortcut + authDataSize + 0x11c, hmac, 32);
     free(hmac);
 
@@ -545,6 +566,8 @@ int resign_shortcut_with_new_plist(uint8_t **signedShortcut, void *plist, size_t
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items_nocopy(items, 2);
     if (!archive) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_archive_item_destroy_nozero(itemPlist);
+        neo_aa_archive_item_destroy_nozero(itemDir);
         return -1;
     }
     size_t aarSize = 0;
@@ -644,6 +667,8 @@ uint8_t *sign_shortcut_with_private_key_and_auth_data(void *plist, size_t plistS
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_items_nocopy(items, 2);
     if (!archive) {
         fprintf(stderr,"libshortcutsign: failed to create aar header\n");
+        neo_aa_archive_item_destroy_nozero(itemPlist);
+        neo_aa_archive_item_destroy_nozero(itemDir);
         return 0;
     }
     size_t aarSize = 0;

@@ -182,6 +182,7 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     size_t n = fread(aeaShortcutArchive, 1, binarySize, fp);
     if (n != binarySize) {
         fprintf(stderr, "libshortcutsign: failed to read all of file\n");
+        free(aeaShortcutArchive);
         return -1;
     }
     fclose(fp);
@@ -189,12 +190,14 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     NeoAEAArchive aea = neo_aea_with_encoded_data_nocopy(aeaShortcutArchive, binarySize);
     if (!aea) {
         fprintf(stderr, "libshortcutsign: failed to allocate AEA\n");
+        free(aeaShortcutArchive);
         return -1;
     }
     size_t aarSize;
     uint8_t *aar = neo_aea_extract_data(aea, &aarSize, 0, 0, 0, 0, 0, 0);
     if (!aar) {
         fprintf(stderr, "libshortcutsign: failed to extract aar from aea\n");
+        neo_aea_destroy(aea);
         return -1;
     }
     neo_aea_destroy(aea);
@@ -202,6 +205,7 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
     /* Unwrap Shortcut.wflow from Apple Archive into destPath */
     
     if (unwrap_file_out_of_neo_aa(aar, destPath, "Shortcut.wflow", aarSize)) {
+        free(aar);
         fprintf(stderr, "libshortcutsign: failed to unwrap Shortcut.wflow\n");
         return -1;
     }
