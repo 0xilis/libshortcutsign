@@ -531,6 +531,8 @@ int verify_signed_shortcut(const char *signedShortcutPath) {
 }
 
 int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
+    int isVerified = -1;
+
     size_t authDataSize;
     uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
     if (!authData) {
@@ -539,13 +541,18 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     }
     if (verify_dict_auth_data(authData, authDataSize)) {
         /* Invalid auth data */
+        free(authData);
         return -1;
     }
     /* I should probably move this to a separate verify shortcut prologue func... */
-    uint8_t **certDataArray;
-    size_t certCount;
-    size_t *certSizesList;
+    uint8_t **certDataArray = NULL;
+    size_t certCount = 0;
+    size_t *certSizesList = NULL;
     int iCloudSigned;
+    uint8_t *signingPublicKey = NULL;
+    NeoAEAArchive aea;
+
+    plist_t plist = NULL; /* iCloud-Signed only */
 
     /* Parse the plist and extract the certificate chain */
     if (parse_plist_for_cert_chain(authData, authDataSize, &certDataArray, &certCount, &certSizesList, &iCloudSigned) != 0) {
@@ -557,10 +564,9 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     STACK_OF(X509) *chain = load_certificate_chain(certDataArray, certCount, certSizesList);
     if (!chain) {
         fprintf(stderr, "Error loading certificate chain\n");
-        return -1;
+        goto cleanup_vssb;
     }
 
-    uint8_t *signingPublicKey = NULL;
     if (iCloudSigned) {
         /* Extract the root certificate (first in the chain) and get the EC public key */
         EVP_PKEY *rootCertPublicKey = NULL;
@@ -570,7 +576,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
         rootCertPublicKey = get_public_key_from_cert(rootCertData, rootCertSize);
         if (!rootCertPublicKey) {
             fprintf(stderr, "Failed to extract public key from certificate\n");
-            return -1;
+            goto cleanup_vssb;
         }
         size_t signingPublicKeySize = 65;
         signingPublicKey = malloc(signingPublicKeySize * 2); /* allocate extra space just in case we grow in size */
@@ -578,18 +584,16 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
         EVP_PKEY_free(rootCertPublicKey);
     } else {
         /* Parse the plist to extract the SigningPublicKey and SigningPublicKeySignature */
-        plist_t plist;
         if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
             fprintf(stderr, "Failed to read plist from file\n");
-            return -1;
+            goto cleanup_vssb;
         }
 
         /* Extract SigningPublicKey */
         plist_t signingPublicKeyItem = plist_dict_get_item(plist, "SigningPublicKey");
         if (!signingPublicKeyItem || plist_get_node_type(signingPublicKeyItem) != PLIST_DATA) {
             fprintf(stderr, "Missing or invalid SigningPublicKey in plist\n");
-            plist_free(plist);
-            return -1;
+            goto cleanup_vssb;
         }
         uint64_t signingPublicKeyLen;
         plist_get_data_val(signingPublicKeyItem, (char **)&signingPublicKey, &signingPublicKeyLen);
@@ -598,26 +602,41 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     /* Ensure signingPublicKey is valid before using it */
     if (!signingPublicKey) {
         fprintf(stderr, "Failed to extract or allocate signingPublicKey\n");
-        return -1;
+        goto cleanup_vssb;
     }
 
-    NeoAEAArchive aea = neo_aea_with_encoded_data_nocopy(buffer, bufferSize);
+    aea = neo_aea_with_encoded_data_nocopy(buffer, bufferSize);
     if (!aea) {
         fprintf(stderr,"libshortcutsign: verification failed to form aea\n");
-        return -1;
+        goto cleanup_vssb;
     }
-    int isVerified = neo_aea_verify(aea, signingPublicKey);
+    isVerified = neo_aea_verify(aea, signingPublicKey);
+
+cleanup_vssb:
+
+    if (plist) {
+        plist_free(plist);
+    }
+
+    if (chain) {
+        sk_X509_pop_free(chain, X509_free);
+    }
 
     /* Free the allocated memory */
-    size_t i;
-    for (i = 0; i < certCount; i++) {
-        free(certDataArray[i]);
+    if (certDataArray) {
+        size_t i;
+        for (i = 0; i < certCount; i++) {
+            free(certDataArray[i]);
+        }
+        free(certDataArray);
     }
-    free(certDataArray);
     free(certSizesList);
     free(authData);
+    free(signingPublicKey);
 
-    neo_aea_destroy(aea);
+    if (aea) {
+        neo_aea_destroy(aea);
+    }
     return isVerified;
 }
 
@@ -644,6 +663,7 @@ SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
     plist_t plist;
     if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");
+        free(authData);
         return SHORTCUT_UNKNOWN_FORMAT;
     }
 
