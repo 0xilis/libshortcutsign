@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
+#include <stddef.h>
+#include <limits.h>
 #include <openssl/ecdsa.h>
 #include <openssl/obj_mac.h>
 #include <openssl/sha.h>
@@ -12,10 +15,11 @@
 #include <openssl/evp.h>
 #include <openssl/encoder.h>
 #include <openssl/x509.h>
+#include <openssl/cms.h>
+#include <openssl/asn1.h>
+#include <openssl/bio.h>
 #include <plist/plist.h>
 #include <openssl/err.h>
-#include <inttypes.h>
-#include <stddef.h>
 #include "extract.h"
 #include "verify.h"
 #include "res.h"
@@ -154,6 +158,181 @@ __attribute__((visibility ("hidden"))) static STACK_OF(X509) *load_certificate_c
     }
 
     return chain;
+}
+
+/*
+ * extract_validation_record_payload
+ *
+ * Extracts the plist from the validation record CMS
+ *
+ * NOTE: Does NOT verify CMS signature or certificate chain.
+ *
+ * returns:
+ * 0: success
+ * -1: failure
+ *
+ * This is a private API! Do not call!
+ */
+__attribute__((visibility ("hidden"))) static int extract_validation_record_payload(const uint8_t *cmsData, size_t cmsDataLen, uint8_t **outPayload, size_t *outPayloadLen) {
+    BIO *input = NULL;
+    CMS_ContentInfo *cms = NULL;
+
+    uint8_t *payload = NULL;
+
+    if (!cmsData || cmsDataLen == 0 || !outPayload || !outPayloadLen) {
+        return -1;
+    }
+
+    *outPayload = NULL;
+    *outPayloadLen = 0;
+
+    if (cmsDataLen > INT_MAX) {
+        fprintf(stderr, "CMS input is too large\n");
+        return -1;
+    }
+
+    input = BIO_new_mem_buf(cmsData, (int)cmsDataLen);
+
+    if (!input) {
+        fprintf(stderr, "Failed to create CMS input BIO\n");
+        goto cleanup_evrp;
+    }
+
+    cms = d2i_CMS_bio(input, NULL);
+
+    if (!cms) {
+        fprintf(stderr, "Failed to parse CMS validation record\n");
+        ERR_print_errors_fp(stderr);
+        goto cleanup_evrp;
+    }
+
+    ASN1_OCTET_STRING **content = CMS_get0_content(cms);
+
+    if (!content || !*content) {
+        fprintf(stderr, "CMS has no embedded content\n");
+        goto cleanup_evrp;
+    }
+
+    int contentLen = ASN1_STRING_length(*content);
+
+    if (contentLen <= 0) {
+        fprintf(stderr, "CMS embedded content is empty\n");
+        goto cleanup_evrp;
+    }
+
+    const unsigned char *contentData = ASN1_STRING_get0_data(*content);
+
+    if (!contentData) {
+        fprintf(stderr, "CMS content data is NULL\n");
+        goto cleanup_evrp;
+    }
+
+    payload = malloc((size_t)contentLen);
+
+    if (!payload) {
+        fprintf(stderr, "Failed to allocate CMS payload\n");
+        goto cleanup_evrp;
+    }
+
+    memcpy(payload, contentData, (size_t)contentLen);
+
+    *outPayload = payload;
+    *outPayloadLen = (size_t)contentLen;
+
+    payload = NULL;
+
+    BIO_free(input);
+    CMS_ContentInfo_free(cms);
+
+    return 0;
+
+cleanup_evrp:
+
+    free(payload);
+
+    if (cms) {
+        CMS_ContentInfo_free(cms);
+    }
+
+    if (input) {
+        BIO_free(input);
+    }
+
+    return -1;
+}
+
+/*
+ * verify_validation_record_payload
+ *
+ * Validates the verification record payload.
+ *
+ * Currently incomplete, does not do any cert/signature checking, and only
+ * checks to see if Version is in compliance
+ *
+ * returns:
+ * 1: validation record rejected 
+ * 0: validation record accepted
+ * -1: malformed plist or parsing error
+ *
+ * This is a private API! Do not call!
+ */
+__attribute__((visibility ("hidden"))) static int verify_validation_record_payload(const uint8_t *payload, size_t payloadLen) {
+    plist_t record = NULL;
+
+    if (!payload || payloadLen == 0) {
+        fprintf(stderr, "Empty validation record\n");
+        return -1;
+    }
+
+    if (plist_from_memory((const char *)payload, payloadLen, &record, 0) != PLIST_ERR_SUCCESS) {
+        fprintf(stderr, "Failed to parse validation record plist\n");
+        return -1;
+    }
+
+    if (plist_get_node_type(record) != PLIST_DICT) {
+        fprintf(stderr, "Validation record is not a dictionary\n");
+        plist_free(record);
+        return 1;
+    }
+
+    /* version has to be 1 to 100 to be deemed valid */
+    int64_t version = 0;
+    plist_t versionItem = plist_dict_get_item(record, "Version");
+
+    if (versionItem) {
+        plist_type type = plist_get_node_type(versionItem);
+
+        if (type == PLIST_UINT) {
+            uint64_t value = 0;
+            plist_get_uint_val(versionItem, &value);
+
+            if (value > INT64_MAX) {
+                fprintf(stderr, "Invalid validation record version\n");
+                plist_free(record);
+                return 1;
+            }
+
+            version = (int64_t)value;
+        }
+        else if (type == PLIST_INT) {
+            plist_get_int_val(versionItem, &version);
+        }
+    }
+
+    if (version < 1 || version > 100) {
+        fprintf(stderr, "Unsupported validation record version: %lld\n", (long long)version);
+        plist_free(record);
+        return 1;
+    }
+
+    /*
+     * Note: For shortcuts specifically, ValidAsOf is ignored,
+     * so we don't have to check if it expired
+     */
+
+    plist_free(record);
+
+    return 0;
 }
 
 /* Function to verify a certificate chain */
@@ -433,9 +612,6 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
         plist_t validationRecordItem = plist_dict_get_item(plist, "AppleIDValidationRecord");
         if (!validationRecordItem || plist_get_node_type(validationRecordItem) != PLIST_DATA) {
             fprintf(stderr, "No validation record present\n");
-            if (validationRecordItem) {
-                plist_free(validationRecordItem);
-            }
             goto cleanup_vdad;
         }
 
@@ -445,8 +621,26 @@ int verify_dict_auth_data(uint8_t *authData, size_t authDataSize) {
 
         if (!validationRecordData || validationRecordSize == 0) {
             fprintf(stderr, "Empty AppleIDValidationRecord\n");
-            free(validationRecordData);
-            plist_free(validationRecordItem);
+            goto cleanup_vdad;
+        }
+
+        /* extract plist from validation record cms data */
+        uint8_t *validationPayload = NULL;
+        size_t validationPayloadLen = 0;
+        if (extract_validation_record_payload((const uint8_t *)validationRecordData,(size_t)validationRecordSize, &validationPayload, &validationPayloadLen)) {
+            fprintf(stderr, "Failed to extract validation record payload\n");
+            goto cleanup_vdad;
+        }
+
+        free(validationRecordData);
+        validationRecordData = NULL;
+
+        int validationResult = verify_validation_record_payload(validationPayload, validationPayloadLen);
+
+        free(validationPayload);
+
+        if (validationResult) {
+            fprintf(stderr, "Validation record payload rejected (error code %d)\n", validationResult);
             goto cleanup_vdad;
         }
     }
