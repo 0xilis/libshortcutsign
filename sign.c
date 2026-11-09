@@ -346,9 +346,12 @@ struct lss_aea_segment_header {
        8 for checksumAlgorithm 1 (Murmur64 Hash)
        32 for checksumAlgorithm 2 (SHA-256)
      */
-    uint8_t* hash;
-    uint8_t segmentHMAC[0x20];
+    uint8_t hash[32];
 };
+
+#define LSS_AEA_CHECKSUM_NONE 0
+#define LSS_AEA_CHECKSUM_MURMUR 1
+#define LSS_AEA_CHECKSUM_SHA256 2
 
 int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, size_t archivedDirSize, size_t *newSize, void *privateKey) {
     /* TODO: This code is really hard to understand */
@@ -365,7 +368,34 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     uint32_t segmentsPerCluster;
     memcpy(&segmentsPerCluster, _signedShortcut + authDataSize + 0xec + 20, 4);
 
-    size_t clusterSegmentHeadersSize = segmentsPerCluster * 40;
+    char compressionAlgorithm = 'e';
+    memcpy(&compressionAlgorithm, _signedShortcut + authDataSize + 0xec + 24, 1);
+    if (compressionAlgorithm != 'e') {
+        printf("Original was not LZFSE, recompressing... (future versions should let you choose the compression)\n");
+        char *rootHeaderCompression = (char *)(_signedShortcut + authDataSize + 0xec + 24);
+        *rootHeaderCompression = 'e';
+    }
+
+    uint8_t checksumAlgorithm;
+    memcpy(&checksumAlgorithm, _signedShortcut + authDataSize + 0xec + 25, 1);
+    size_t sizeOfSegmentHeader = 40;
+    if (checksumAlgorithm == LSS_AEA_CHECKSUM_NONE) {
+        /* None */
+        sizeOfSegmentHeader = 8;
+    } else if (checksumAlgorithm == LSS_AEA_CHECKSUM_MURMUR) {
+        /* Murmur hash */
+        sizeOfSegmentHeader = 16;
+        fprintf(stderr,"libshortcutsign: Murmur hashes currently unsupported\n");
+        return -1;
+    } else if (checksumAlgorithm == LSS_AEA_CHECKSUM_SHA256) {
+        /* SHA256 (default, most likely) */
+        sizeOfSegmentHeader = 40;
+    } else {
+        fprintf(stderr,"libshortcutsign: bad checksumAlgorithm in AEA root header\n");
+        return -1;
+    }
+
+    size_t clusterSegmentHeadersSize = segmentsPerCluster * sizeOfSegmentHeader;
     size_t clusterHmacsSize = (segmentsPerCluster * 32) + 32;
 
     /* Set compressed LZFSE data */
@@ -449,6 +479,25 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         segmentHeader->originalSize = segmentSize;
         segmentHeader->compressedSize = compressedSize;
 
+        if (checksumAlgorithm == LSS_AEA_CHECKSUM_SHA256) {
+            /* SHA-256 checksumAlgorithm */
+            unsigned int checksumLength = 0;
+
+            if (!EVP_Digest(
+                originalFileSegment,
+                segmentSize,
+                segmentHeader->hash,
+                &checksumLength,
+                EVP_sha256(),
+                NULL
+             ) || checksumLength != 32) {
+
+                fprintf(stderr, "libshortcutsign: failed to calculate segment checksum\n");
+                free(aea_ck);
+                return -1;
+            }
+        }
+
         uint8_t aea_sk_ctx[10];
         memcpy(aea_sk_ctx, "AEA_SK", 6);
         *(int *)&aea_sk_ctx[6] = nSegments;
@@ -467,7 +516,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
         segmentData += compressedSize;
         mallocSizeLeft -= compressedSize;
         originalFileSegment += segmentSize;
-        segmentHeader += 40;
+        segmentHeader += sizeOfSegmentHeader;
         segmentHMAC += 32;
         resignedShortcutSize += compressedSize;
     }
