@@ -744,7 +744,7 @@ int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     size_t *certSizesList = NULL;
     int iCloudSigned;
     uint8_t *signingPublicKey = NULL;
-    NeoAEAArchive aea;
+    NeoAEAArchive aea = NULL;
 
     plist_t plist = NULL; /* iCloud-Signed only */
 
