@@ -38,7 +38,7 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     free(archive);
     return authData;
 }
-uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, size_t *authDataSize) {
+uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, size_t bufferSize, size_t *authDataSize) {
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
     uint32_t _authDataSize;
     memcpy(&_authDataSize, buffer + 8, 4);
@@ -76,7 +76,7 @@ uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, uint8_t bufferSize, siz
     return authData;
 }
 
-__attribute__((visibility ("hidden"))) static int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char *pathString, size_t bufferSize) {
+static int unwrap_file_out_of_neo_aa(uint8_t *inputBuffer, const char *outputPath, char *pathString, size_t bufferSize) {
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_encoded_data(bufferSize, inputBuffer);
     if (!archive) {
         fprintf(stderr,"Not enough free memory to allocate archive\n");
@@ -120,7 +120,7 @@ __attribute__((visibility ("hidden"))) static int unwrap_file_out_of_neo_aa(uint
     return -1;
 }
 
-__attribute__((visibility ("hidden"))) static uint8_t *unwrap_file_out_of_neo_aa_buffer(uint8_t *inputBuffer, char *pathString, size_t bufferSize, size_t *outBufferSize) {
+static uint8_t *unwrap_file_out_of_neo_aa_buffer(uint8_t *inputBuffer, char *pathString, size_t bufferSize, size_t *outBufferSize) {
     NeoAAArchivePlain archive = neo_aa_archive_plain_create_with_encoded_data(bufferSize, inputBuffer);
     if (!archive) {
         fprintf(stderr,"Not enough free memory to allocate archive\n");

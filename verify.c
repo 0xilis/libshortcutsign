@@ -26,7 +26,7 @@
 #include <libNeoAppleArchive.h>
 
 /* Function to convert EVP_PKEY to X9.63 encoded ECDSA-P256 public key */
-__attribute__((visibility ("hidden"))) int convert_evp_pkey_to_x963(EVP_PKEY *pkey, uint8_t *out, size_t *out_len) {
+static int convert_evp_pkey_to_x963(EVP_PKEY *pkey, uint8_t *out, size_t *out_len) {
     BIGNUM *x = NULL, *y = NULL;
     int rc = -1;
     
@@ -120,7 +120,7 @@ void print_certificate_info(X509 *cert) {
 }
 
 /* Function to load a certificate chain from an array of certificate data */
-__attribute__((visibility ("hidden"))) static STACK_OF(X509) *load_certificate_chain(uint8_t **certDataArray, size_t certCount, size_t *certSizesList) {
+static STACK_OF(X509) *load_certificate_chain(uint8_t **certDataArray, size_t certCount, size_t *certSizesList) {
     STACK_OF(X509) *chain = sk_X509_new_null();
     if (!chain) {
         fprintf(stderr, "Error creating certificate chain\n");
@@ -173,7 +173,7 @@ __attribute__((visibility ("hidden"))) static STACK_OF(X509) *load_certificate_c
  *
  * This is a private API! Do not call!
  */
-__attribute__((visibility ("hidden"))) static int extract_validation_record_payload(const uint8_t *cmsData, size_t cmsDataLen, uint8_t **outPayload, size_t *outPayloadLen) {
+static int extract_validation_record_payload(const uint8_t *cmsData, size_t cmsDataLen, uint8_t **outPayload, size_t *outPayloadLen) {
     BIO *input = NULL;
     CMS_ContentInfo *cms = NULL;
 
@@ -276,7 +276,7 @@ cleanup_evrp:
  *
  * This is a private API! Do not call!
  */
-__attribute__((visibility ("hidden"))) static int verify_validation_record_payload(const uint8_t *payload, size_t payloadLen) {
+static int verify_validation_record_payload(const uint8_t *payload, size_t payloadLen) {
     plist_t record = NULL;
 
     if (!payload || payloadLen == 0) {
@@ -336,7 +336,7 @@ __attribute__((visibility ("hidden"))) static int verify_validation_record_paylo
 }
 
 /* Function to verify a certificate chain */
-__attribute__((visibility ("hidden"))) static int verify_certificate_chain(STACK_OF(X509) *chain) {
+static int verify_certificate_chain(STACK_OF(X509) *chain) {
     if (!chain || sk_X509_num(chain) == 0) {
         fprintf(stderr, "Empty or invalid certificate chain\n");
         return -1;
@@ -390,7 +390,7 @@ __attribute__((visibility ("hidden"))) static int verify_certificate_chain(STACK
     return ret; /* returns 1 if valid, 0 if invalid */
 }
 
-__attribute__((visibility ("hidden"))) static int verify_rsa_signature(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, EVP_PKEY *pkey) {
+static int verify_rsa_signature(const uint8_t *signed_data, size_t signed_data_len, const uint8_t *signature, size_t sig_len, EVP_PKEY *pkey) {
     /* Log the signed data and its hash for debugging */
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(signed_data, signed_data_len, hash);
@@ -431,7 +431,7 @@ __attribute__((visibility ("hidden"))) static int verify_rsa_signature(const uin
 }
 
 /* Function to extract the RSA public key from a certificate */
-__attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert(const uint8_t *certData, size_t certSize) {
+static EVP_PKEY* get_public_key_from_cert(const uint8_t *certData, size_t certSize) {
     const unsigned char *p = certData;
 
     X509 *cert = d2i_X509(NULL, &p, certSize);
@@ -470,7 +470,7 @@ __attribute__((visibility ("hidden"))) static EVP_PKEY* get_public_key_from_cert
 
 
 /* Function to parse the plist file and extract the AppleIDCertificateChain */
-__attribute__((visibility ("hidden"))) static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned) {
+static int parse_plist_for_cert_chain(uint8_t *authData, size_t authDataSize, uint8_t ***certDataArray, size_t *certCount, size_t **certSizesList, int *iCloudSigned) {
     plist_t plist;
     if (plist_from_memory((const char *)authData, authDataSize, &plist, 0) != PLIST_ERR_SUCCESS) {
         fprintf(stderr, "Failed to read plist from file\n");

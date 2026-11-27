@@ -1,7 +1,7 @@
 buildDir = build/obj
 CC = clang
 OS := $(shell if [ -n "$$OS" ]; then echo "$$OS"; else uname; fi)
-CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/
+CFLAGS += -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/
 ifeq ($(OS),Windows_NT) 
 CFLAGS += -I/ucrt64/include
 else
@@ -21,7 +21,15 @@ VERSION_SCRIPT = EXPORTS
 DEBUG ?= 0
 
 ifeq ($(DEBUG), 1)
+ifeq ($(OS),Windows_NT) 
+  # AddressSanitizer unavailable on Windows/ucrt64
+  CFLAGS += -g -O0
+else
   CFLAGS += -g -fsanitize=address
+endif
+else
+  # Not compiling for DEBUG, add -Os flag
+  CFLAGS += -Os
 endif
 
 output: $(buildDir)
@@ -31,7 +39,7 @@ output: $(buildDir)
 
 	@ # Build libNeoAppleArchive submodule
 	@echo "building libNeoAppleArchive..."
-	$(MAKE) -C $(NEOAPPLEARCHIVE_DIR)
+	$(MAKE) -C $(NEOAPPLEARCHIVE_DIR) DEBUG=$(DEBUG)
 
 	@ # Build libshortcutsign.a
 	@echo "building libshortcutsign..."

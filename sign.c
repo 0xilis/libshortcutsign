@@ -22,7 +22,7 @@
 #define EMBEDDED_SIGNED_DATA_SIZE 10589
 #define EMBEDDED_SIGNED_DATA_ADS 0x01
 
-__attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
+static void *hmac_derive(void *hkdf_key, void *data1, size_t data1Len, void *data2, size_t data2Len) {
     unsigned char *hmac = malloc(SHA256_DIGEST_LENGTH);
     if (!hmac) {
         fprintf(stderr,"hmac_derive failed due to out-of-memory\n");
@@ -99,7 +99,7 @@ __attribute__((visibility ("hidden"))) static void *hmac_derive(void *hkdf_key, 
     return hmac;
 }
 
-__attribute__((visibility ("hidden"))) static void *do_hkdf(void *context, size_t contextLen, void *key) {
+static void *do_hkdf(void *context, size_t contextLen, void *key) {
     void *derivedKey = malloc(512);
     if (!derivedKey) {
         return NULL;
@@ -136,7 +136,7 @@ __attribute__((visibility ("hidden"))) static void *do_hkdf(void *context, size_
 }
 
 /* Helper function to perform HKDF using OpenSSL */
-__attribute__((visibility ("hidden"))) static int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
+static int hkdf_extract_and_expand_helper(const uint8_t *salt, size_t salt_len,
                             const uint8_t *key, size_t key_len,
                             const uint8_t *info, size_t info_len,
                             uint8_t *out, size_t out_len) {
@@ -360,7 +360,7 @@ int resign_shortcut_with_new_aa(uint8_t **signedShortcut, void *archivedDir, siz
     uint8_t *_signedShortcut = *signedShortcut;
 
     /* Extract authDataSize from signedShortcut */
-    size_t authDataSize;
+    uint32_t authDataSize;
     memcpy(&authDataSize, _signedShortcut + 8, 4);
 
     memcpy(_signedShortcut + authDataSize + 0xec, &archivedDirSize, 4);

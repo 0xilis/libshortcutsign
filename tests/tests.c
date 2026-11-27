@@ -3,7 +3,7 @@
 #include <string.h>
 #include <libshortcutsign.h>
 
-__attribute__((visibility ("hidden"))) static const char* ssFormatToString(SSFormat format) {
+static const char* ssFormatToString(SSFormat format) {
     switch (format) {
         case SHORTCUT_UNKNOWN_FORMAT: return "SHORTCUT_UNKNOWN_FORMAT";
         case SHORTCUT_UNSIGNED: return "SHORTCUT_UNSIGNED";
@@ -13,7 +13,7 @@ __attribute__((visibility ("hidden"))) static const char* ssFormatToString(SSFor
     }
 }
 
-__attribute__((visibility ("hidden"))) static uint8_t *load_binary(const char *signedShortcutPath, size_t *binarySize) {
+static uint8_t *load_binary(const char *signedShortcutPath, size_t *binarySize) {
     /* load AEA archive into memory */
     FILE *fp = fopen(signedShortcutPath,"rb");
     if (!fp) {
@@ -39,6 +39,7 @@ __attribute__((visibility ("hidden"))) static uint8_t *load_binary(const char *s
 
 int main(void) {
     printf("Starting tests...\n");
+
     size_t shortcutSize = 0;
     uint8_t *shortcut = load_binary("contactVerificationTest.shortcut", &shortcutSize);
     if (!shortcut) {

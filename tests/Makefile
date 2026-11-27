@@ -1,6 +1,13 @@
 buildDir = build
 CC = clang
-CFLAGS = -std=c89 -I../build/lzfse/include -I../build/libzbitmap/include -I../ -g -fsanitize=address
+OS := $(shell if [ -n "$$OS" ]; then echo "$$OS"; else uname; fi)
+CFLAGS += -std=c89 -I../build/lzfse/include -I../build/libzbitmap/include -I../ -g
+ifeq ($(OS),Windows_NT) 
+# mingw Windows unfortunately does not provide asan
+CFLAGS += -I/ucrt64/include
+else
+CFLAGS += -I/opt/homebrew/opt/openssl@3/include -I/opt/homebrew/opt/libplist/include -fsanitize=address
+endif
 
 LIBSHORTCUTSIGN_DIR = ../
 
