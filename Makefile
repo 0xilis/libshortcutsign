@@ -1,6 +1,12 @@
 buildDir = build/obj
 CC = clang
-CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/ -I/opt/homebrew/opt/openssl@3/include -I/opt/homebrew/opt/libplist/include
+OS := $(shell if [ -n "$$OS" ]; then echo "$$OS"; else uname; fi)
+CFLAGS += -Os -Wall -Wpedantic -Wextra -fPIC -Ilibs/libNeoAppleArchive/libNeoAppleArchive -Ibuild/lzfse/include/
+ifeq ($(OS),Windows_NT) 
+CFLAGS += -I/ucrt64/include
+else
+CFLAGS += -I/opt/homebrew/opt/openssl@3/include -I/opt/homebrew/opt/libplist/include
+endif
 
 # Paths for lzfse
 LZFSE_DIR = libs/lzfse
@@ -9,8 +15,6 @@ BUILD_DIR = ../../build/lzfse
 OBJ_DIR = build/obj
 
 NEOAPPLEARCHIVE_DIR = libs/libNeoAppleArchive
-
-OS := $(shell uname)
 
 VERSION_SCRIPT = EXPORTS
 
@@ -41,7 +45,9 @@ output: $(buildDir)
 	@ar rcs build/usr/lib/libshortcutsign.a build/obj/*.o
 
 	@# Create shared library and use version script
-	@if [ "$(OS)" = "Darwin" ]; then\
+	@if [ "$(OS)" = "Windows_NT" ]; then\
+		$(CC) -shared -o build/usr/lib/libshortcutsign.dll build/obj/*.o -Lbuild/lzfse/lib -Llibs/libNeoAppleArchive/build/libzbitmap/lib -Llibs/libNeoAppleArchive/build/usr/lib -lNeoAppleArchive -lzbitmap -llzfse -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS) -Wl,--export-all-symbols; \
+	elif [ "$(OS)" = "Darwin" ]; then\
 		$(CC) -shared -o build/usr/lib/libshortcutsign.dylib build/obj/*.o -Lbuild/lzfse/lib -Llibs/libNeoAppleArchive/build/libzbitmap/lib -Llibs/libNeoAppleArchive/build/usr/lib -lNeoAppleArchive -lzbitmap -llzfse -lz -lssl -lcrypto -lplist-2.0 -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/opt/libplist/lib $(CFLAGS) -Wl,-install_name,@rpath/libshortcutsign.dylib -Wl,-exported_symbols_list,$(VERSION_SCRIPT);\
 	else\
 		$(CC) -shared -o build/usr/lib/libshortcutsign.so build/obj/*.o -Lbuild/lzfse/lib -Llibs/libNeoAppleArchive/build/libzbitmap/lib -Llibs/libNeoAppleArchive/build/usr/lib -lNeoAppleArchive -lzbitmap -llzfse -lz -lssl -lcrypto -lplist-2.0 $(CFLAGS);\
