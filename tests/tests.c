@@ -18,18 +18,27 @@ static uint8_t *load_binary(const char *signedShortcutPath, size_t *binarySize) 
     FILE *fp = fopen(signedShortcutPath,"rb");
     if (!fp) {
         fprintf(stderr,"shortcut-sign: load_binary could not open path\n");
-        return 0;
+        return NULL;
     }
-    fseek(fp, 0, SEEK_END);
-    size_t _binarySize = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+    if (fseeko(fp, 0, SEEK_END) != 0) {
+        fprintf(stderr,"reached SEEK_END. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return NULL;
+    }
+    off_t fileSize = ftello(fp);
+    if (fileSize < 0 || fseeko(fp, 0, SEEK_SET) != 0) {
+        fprintf(stderr,"File size is smaller. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return NULL;
+    }
+    size_t _binarySize = (size_t)fileSize;
     uint8_t *aeaShortcutArchive = malloc(_binarySize);
     size_t n = fread(aeaShortcutArchive, 1, _binarySize, fp);
     fclose(fp);
     if (n != _binarySize) {
         fprintf(stderr,"shortcut-sign: load_binary could not read entire file\n");
         free(aeaShortcutArchive);
-        return 0;
+        return NULL;
     }
     if (binarySize) {
         *binarySize = _binarySize;

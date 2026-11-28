@@ -165,7 +165,10 @@ static STACK_OF(X509) *load_certificate_chain(uint8_t **certDataArray, size_t ce
  *
  * Extracts the plist from the validation record CMS
  *
- * NOTE: Does NOT verify CMS signature or certificate chain.
+ * TODO:
+ * This performs CMS signature verification only.
+ * It does NOT validate the signer's certificate chain or establish
+ * that the signer is trusted by Apple.
  *
  * returns:
  * 0: success
@@ -175,6 +178,7 @@ static STACK_OF(X509) *load_certificate_chain(uint8_t **certDataArray, size_t ce
  */
 static int extract_validation_record_payload(const uint8_t *cmsData, size_t cmsDataLen, uint8_t **outPayload, size_t *outPayloadLen) {
     BIO *input = NULL;
+    BIO *output = NULL;
     CMS_ContentInfo *cms = NULL;
 
     uint8_t *payload = NULL;
@@ -206,41 +210,43 @@ static int extract_validation_record_payload(const uint8_t *cmsData, size_t cmsD
         goto cleanup_evrp;
     }
 
-    ASN1_OCTET_STRING **content = CMS_get0_content(cms);
+    output = BIO_new(BIO_s_mem());
 
-    if (!content || !*content) {
-        fprintf(stderr, "CMS has no embedded content\n");
+    if (!output) {
+        fprintf(stderr, "Failed to create CMS output BIO\n");
         goto cleanup_evrp;
     }
 
-    int contentLen = ASN1_STRING_length(*content);
-
-    if (contentLen <= 0) {
-        fprintf(stderr, "CMS embedded content is empty\n");
+    /* Verify CMS signature without checking certificate trust */
+    if (CMS_verify(cms, NULL, NULL, NULL, output, CMS_BINARY | CMS_NO_SIGNER_CERT_VERIFY) != 1) {
+        fprintf(stderr, "Failed to verify CMS signature\n");
+        ERR_print_errors_fp(stderr);
         goto cleanup_evrp;
     }
 
-    const unsigned char *contentData = ASN1_STRING_get0_data(*content);
+    BUF_MEM *mem = NULL;
+    BIO_get_mem_ptr(output, &mem);
 
-    if (!contentData) {
-        fprintf(stderr, "CMS content data is NULL\n");
+    if (!mem || !mem->data || mem->length == 0) {
+        fprintf(stderr, "CMS verified content is empty\n");
         goto cleanup_evrp;
     }
 
-    payload = malloc((size_t)contentLen);
+    payload = malloc(mem->length);
 
     if (!payload) {
         fprintf(stderr, "Failed to allocate CMS payload\n");
         goto cleanup_evrp;
     }
 
-    memcpy(payload, contentData, (size_t)contentLen);
+    memcpy(payload, mem->data, mem->length);
 
     *outPayload = payload;
-    *outPayloadLen = (size_t)contentLen;
+    *outPayloadLen = mem->length;
 
     payload = NULL;
 
+    BIO_free(output);
     BIO_free(input);
     CMS_ContentInfo_free(cms);
 
@@ -249,6 +255,10 @@ static int extract_validation_record_payload(const uint8_t *cmsData, size_t cmsD
 cleanup_evrp:
 
     free(payload);
+
+    if (output) {
+        BIO_free(output);
+    }
 
     if (cms) {
         CMS_ContentInfo_free(cms);
@@ -709,9 +719,22 @@ int verify_signed_shortcut(const char *signedShortcutPath) {
         fprintf(stderr,"libshortcutsign: verify_signed_shortcut failed to find path\n");
         return -1;
     }
-    fseek(fp, 0, SEEK_END);
-    size_t binarySize = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+    if (fseeko(fp, 0, SEEK_END) != 0) {
+        fprintf(stderr,"reached SEEK_END. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return -1;
+    }
+    off_t fileSize = ftello(fp);
+    if (fileSize < 0 || fseeko(fp, 0, SEEK_SET) != 0) {
+        fprintf(stderr,"File size is smaller. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return -1;
+    }
+    size_t binarySize = (size_t)fileSize;
+    if (binarySize < 12) {
+        fprintf(stderr,"libshortcutsign: file to small to be a signed shortcut\n");
+        return -1;
+    }
     uint8_t *aeaShortcutArchive = malloc(binarySize);
     size_t n = fread(aeaShortcutArchive, 1, binarySize, fp);
     if (n != binarySize) {
@@ -727,12 +750,35 @@ int verify_signed_shortcut(const char *signedShortcutPath) {
 int verify_signed_shortcut_buffer(uint8_t *buffer, size_t bufferSize) {
     int isVerified = -1;
 
+    if (!buffer) {
+        fprintf(stderr,"libshortcutsign: NULL buffer\n");
+        return -1;
+    }
+
+    if (bufferSize < 12) {
+        fprintf(stderr, "libshortcutsign: buffer too small to hold AEA header, not an aea\n");
+        return -1;
+    }
+
+    uint32_t headerMagic;
+    memcpy(&headerMagic, buffer, sizeof(headerMagic));
+    if (headerMagic != 0x31414541) { /* AEA1 */
+        fprintf(stderr, "libshortcutsign: buffer data not AEA1\n");
+        return -1;
+    }
+
     size_t authDataSize;
     uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
-    if (!authData) {
+    if (!authData || !authDataSize) {
         fprintf(stderr,"libshortcutsign: verification failed to extract authData\n");
         return -1;
     }
+    if (authDataSize > bufferSize - 12) {
+        fprintf(stderr,"libshortcutsign: authDataSize > bufferSize - 12\n");
+        free(authData);
+        return -1;
+    }
+
     if (verify_dict_auth_data(authData, authDataSize)) {
         /* Invalid auth data */
         free(authData);
@@ -835,10 +881,11 @@ cleanup_vssb:
 }
 
 SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
-    if (bufferSize < 6) {
-        fprintf(stderr,"libshortcutsign: buffer too small\n");
+    if (!buffer) {
+        fprintf(stderr,"libshortcutsign: NULL buffer\n");
         return SHORTCUT_UNKNOWN_FORMAT;
     }
+
     /* First see if it's bplist or plist */
     if (strncmp("bplist", (char *)buffer, 6) == 0) {
         return SHORTCUT_UNSIGNED;
@@ -846,11 +893,29 @@ SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
     if (strncmp("<?xml", (char *)buffer, 5) == 0) {
         return SHORTCUT_UNSIGNED;
     }
+
     /* check signed shortcut */
+    if (bufferSize < 12) {
+        fprintf(stderr,"libshortcutsign: buffer too small\n");
+        return SHORTCUT_UNKNOWN_FORMAT;
+    }
+
+    uint32_t headerMagic;
+    memcpy(&headerMagic, buffer, sizeof(headerMagic));
+    if (headerMagic != 0x31414541) { /* AEA1 */
+        fprintf(stderr, "libshortcutsign: buffer data not AEA1\n");
+        return -1;
+    }
+
     size_t authDataSize;
     uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
     if (!authData || !authDataSize) {
         fprintf(stderr,"libshortcutsign: get_shortcut_format failed to extract authData\n");
+        return SHORTCUT_UNKNOWN_FORMAT;
+    }
+    if (authDataSize > bufferSize - 12) {
+        fprintf(stderr,"libshortcutsign: authDataSize > bufferSize - 12\n");
+        free(authData);
         return SHORTCUT_UNKNOWN_FORMAT;
     }
 
@@ -880,10 +945,32 @@ SSFormat get_shortcut_format(uint8_t *buffer, size_t bufferSize) {
 }
 
 void print_shortcut_cert_info(uint8_t *buffer, size_t bufferSize) {
+    if (!buffer) {
+        fprintf(stderr,"libshortcutsign: NULL buffer\n");
+        return;
+    }
+
+    if (bufferSize < 12) {
+        fprintf(stderr,"libshortcutsign: buffer too small\n");
+        return;
+    }
+
+    uint32_t headerMagic;
+    memcpy(&headerMagic, buffer, sizeof(headerMagic));
+    if (headerMagic != 0x31414541) { /* AEA1 */
+        fprintf(stderr, "libshortcutsign: buffer data not AEA1\n");
+        return;
+    }
+
     size_t authDataSize;
     uint8_t *authData = auth_data_from_shortcut_buffer(buffer, bufferSize, &authDataSize);
-    if (!authData) {
+    if (!authData || !authDataSize) {
         fprintf(stderr,"libshortcutsign: failed to extract authData\n");
+        return;
+    }
+    if (authDataSize > bufferSize - 12) {
+        fprintf(stderr,"libshortcutsign: authDataSize > bufferSize - 12\n");
+        free(authData);
         return;
     }
 

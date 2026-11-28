@@ -19,15 +19,63 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     FILE *fp = fopen(path, "rb");
     if (!fp) {
         fprintf(stderr,"libshortcutsign: failed to open file\n");
+        return NULL;
+    }
+    if (fseeko(fp, 0, SEEK_END) != 0) {
+        fprintf(stderr,"reached SEEK_END. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return NULL;
+    }
+    off_t fileSize = ftello(fp);
+    if (fileSize < 0 || fseeko(fp, 0, SEEK_SET) != 0) {
+        fprintf(stderr,"File size is smaller. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return NULL;
+    }
+    if (fileSize < 12) {
+        fprintf(stderr,"libshortcutsign: file to small to be a signed shortcut\n");
+        return NULL;
+    }
+
+    /* read only header at first */
+    uint8_t header[12];
+    if (fread(header, 1, sizeof(header), fp) != sizeof(header)) {
+        fprintf(stderr, "libshortcutsign: failed to read header\n");
+        fclose(fp);
+        return NULL;
+    }
+
+    uint32_t headerMagic;
+    memcpy(&headerMagic, header, sizeof(headerMagic));
+
+    if (headerMagic != 0x31414541) { /* AEA1 */
+        fprintf(stderr, "libshortcutsign: file data not AEA1\n");
+        fclose(fp);
+        return NULL;
+    }
+
+    /* Extract auth data size */
+    uint32_t _authDataSize;
+    memcpy(&_authDataSize, header + 8, sizeof(_authDataSize));
+
+    size_t size = (size_t)_authDataSize + 12;
+    if (_authDataSize > fileSize - 12) {
+        fprintf(stderr,"libshortcutsign: size reached past fileSize\n");
         return 0;
     }
-    fseek(fp, 0, SEEK_END);
-    size_t size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+
     uint8_t *archive = malloc(size);
+    if (!archive) {
+        fprintf(stderr, "libshortcutsign: failed to allocate memory\n");
+        fclose(fp);
+        return NULL;
+    }
+
+    /* copy header */
+    memcpy(archive, header, sizeof(header));
+
     /* copy bytes to binary */
-    size_t n = fread(archive, 1, size, fp);
-    if (n < size) {
+    if (fread(archive + 12, 1, _authDataSize, fp) != _authDataSize) {
         free(archive);
         fclose(fp);
         fprintf(stderr,"libshortcutsign: failed to read entire auth data\n");
@@ -38,18 +86,31 @@ uint8_t *auth_data_from_shortcut(const char *path, size_t *authDataSize) {
     free(archive);
     return authData;
 }
+
 uint8_t *auth_data_from_shortcut_buffer(uint8_t *buffer, size_t bufferSize, size_t *authDataSize) {
+    if (!buffer) {
+        fprintf(stderr,"libshortcutsign: NULL buffer\n");
+        return NULL;
+    }
+
+    if (bufferSize < 12) {
+        fprintf(stderr,"libshortcutsign: buffer too small\n");
+        return NULL;
+    }
+
+    uint32_t headerMagic;
+    memcpy(&headerMagic, buffer, sizeof(headerMagic));
+    if (headerMagic != 0x31414541) { /* AEA1 */
+        fprintf(stderr, "libshortcutsign: buffer data not AEA1\n");
+        return NULL;
+    }
+
     /* find the size of AEA_CONTEXT_FIELD_AUTH_DATA field blob */
     uint32_t _authDataSize;
     memcpy(&_authDataSize, buffer + 8, 4);
-    if (_authDataSize > bufferSize-0x293c) {
-        /* 
-         * The encrypted data for for signed shortcuts, both contact signed
-         * and icloud signed, should be at authDataSize+0x293c. If our authDataSize
-         * reaches to or past the encrypted data, then it's too big.
-        */
+    if (_authDataSize > bufferSize - 12) {
         fprintf(stderr,"libshortcutsign: authDataSize reaches past data start\n");
-        return 0;
+        return NULL;
     }
     /* we got authDataSize, now fill buffer */
     uint8_t *authData = (uint8_t *)malloc(_authDataSize);
@@ -175,9 +236,23 @@ int extract_signed_shortcut(const char *signedShortcutPath, const char *destPath
         fprintf(stderr,"libshortcutsign: extract_signed_shortcut failed to find path\n");
         return -1;
     }
-    fseek(fp, 0, SEEK_END);
-    size_t binarySize = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+    if (fseeko(fp, 0, SEEK_END) != 0) {
+        fprintf(stderr,"reached SEEK_END. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return -1;
+    }
+    off_t fileSize = ftello(fp);
+    if (fileSize < 0 || fseeko(fp, 0, SEEK_SET) != 0) {
+        fprintf(stderr,"File size is smaller. If you see this, something is seriously wrong! Please make an issue with the archive file so I (or whoever is maintaining libshortcutsign) can investigate.\n");
+        fclose(fp);
+        return -1;
+    }
+    uint64_t binarySize = (uint64_t)fileSize;
+    if (binarySize < 12) {
+        fclose(fp);
+        fprintf(stderr,"libshortcutsign: AEA is less than 6 bytes \n");
+        return -1;
+    }
     uint8_t *aeaShortcutArchive = malloc(binarySize);
     size_t n = fread(aeaShortcutArchive, 1, binarySize, fp);
     if (n != binarySize) {
